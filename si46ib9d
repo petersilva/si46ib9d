@@ -1,0 +1,563 @@
+#!/usr/bin/env python
+
+# master2all
+# nameing ideas:
+#    oftcta - One File to Config Them All
+#    si46ib9d - Simple Setup Script for IP v4 & v6 for ISC bind9 & dhcp.
+#
+#Specification
+#	get host dns and MAC from data.master 
+#       Get IPv6 prefix from /etc/radvd.conf 
+#       Build:  dns zones (fwd and reverse) and dhcp (v4) file.
+#
+#  FIXME:
+#       hard coded /etc/bind -> wdir.
+#
+# later:
+#     get dhcp v6 to work.
+#     make zones for ipv6 link-local configs.
+#     
+# not setting for now:
+#     named.conf.options  - where you set dns forwarders.
+#     named.conf          - assume debian stock version.
+#     
+
+import sys
+import getopt
+import time
+import copy
+import os
+import fnmatch
+
+import operator
+
+# these three are for get_ipv4_address
+import socket
+import fcntl
+import struct
+
+def get_ipv4_address(ifname):
+    """ return the ipv4 address corresponding to the given interface.
+
+        shamelessly googled from:
+
+	http://code.activestate.com/recipes/439094-get-the-ip-address-associated-with-a-network-inter/
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    return socket.inet_ntoa(fcntl.ioctl(
+        s.fileno(),
+        0x8915,  # SIOCGIFADDR
+        struct.pack('256s', ifname[:15])
+    )[20:24])
+
+import array
+
+def all_ipv4_interfaces():
+    """ list all the up interfaces on this machine
+    """
+    max_possible = 128  # arbitrary. raise if needed.
+    bytes = max_possible * 32
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    names = array.array('B', '\0' * bytes)
+    outbytes = struct.unpack('iL', fcntl.ioctl(
+        s.fileno(),
+        0x8912,  # SIOCGIFCONF
+        struct.pack('iL', bytes, names.buffer_info()[0])
+    ))[0]
+    namestr = names.tostring()
+    return [namestr[i:i+32].split('\0', 1)[0] for i in range(0, outbytes, 32)]
+
+def ipv6_proc2quads(a):
+    """ convert an ipv6 address from:
+	2607fa486d9c02900000000000000001 to 2607:fa48:6d9c:290::1
+	
+        "bugs"
+	    does not remove zeroes for now, either leading or eliding.
+	    correct algorithm would find the longest string of zeroes and turn them into ::.
+	    this does :0290:0000:0000: ...:0001 instead of :290::1
+    """
+    gby4 = [ a[i:i+4] for i in range(0,len(a),4) ]
+    return ':'.join(gby4)
+
+
+def all_ipv6_interfaces():
+    """ Parse /proc/net/if_inet6 to find:
+	all the inet6 interface on the system, and their address scopes.
+
+	scope: 00: Global, 0x20: local, 0x10 Loopback 
+    """
+    scope = { '00':'Global', '20':'local', '10':'Loopback', '80':'Organization' }
+    pf = open( "/proc/net/if_inet6", "r")
+    
+    ipv6_interfaces=[]
+    ip6 = {}
+    for p in pf.readlines():
+	ps = p.split() 
+	ip6['address']=ipv6_proc2quads(ps[0])
+	ip6['scope']=scope[ps[3]]
+        ip6['interface']=ps[5]
+        ipv6_interfaces.append(copy.deepcopy(ip6))
+
+    return ipv6_interfaces
+
+def empty_internal_reverse_zones(w, networks):
+    """ populate the dbr.empty-zones file.
+        Are there IPv6 equivalents also? Dunno!
+    """
+    empty_nets = ( '10', '192.168', '172.16', '172.17','172.18','172.19','172.20','172.21', \
+       '172.22', '172.23', '172.24', '172.25', '172.26', '172.27', '172.28', '172.29', \
+       '172.30', '172.31' )
+    enf = open( w  + "/dbr.empty-zones", "w" )
+    for en in empty_nets:
+	na = en.split('.')
+	if len(na) == 2:
+	    found=False
+	    for un in networks:
+		unr = un.split('.')
+		if ( na[0] == unr[0] ) and ( na[1] == unr[1] ):
+	  		found=True
+	     
+	    if not found:
+	       enf.write( "zone \"%s.%s.in-addr.arpa\" { type master; file \"/etc/bind/db.empty\"; }; \n" \
+			% ( na[1], na[0] ) );
+        elif len(na) == 1:
+	    found=False
+	    for un in networks:
+		unr = un.split('.')
+		if ( na[0] == unr[0] ) :
+	  		found=True
+	    
+	    if not found:
+	       enf.write( "zone \"%s.in-addr.arpa\" { type master; file \"/etc/bind/db.empty\"; }; \n" % (na[0] ) );
+	else:
+	    print "Error, unexpected network!"
+	    continue
+	
+    enf.close()
+
+
+def mac2eui( mac ):
+    """ mac2eui generates the ipv6 auto configuration address after 
+        check for duplication. Ignoring the duplication check because if 
+        there really are two nodes with the same mac on the same ether,
+        fixing the ipv6 address isn't going to help because ethernet will 
+	be borked anyways.
+    """
+    f=mac.split(':')
+    f.insert(3,'fe')    
+    f.insert(3,'ff')    
+    f[0] = "%02x" % (int(f[0],16)|2)
+    return "%s%s:%s%s:%s%s:%s%s" % tuple(f)
+
+def ipv6hex2dotpfx( p ):
+    dotpfx=i6h2daddr(p)
+    return dotpfx[32:]
+
+def i6h2daddr( p ):
+    """
+	convert IPv6 Hexadecimal to reverse dotted notation.
+	2607:fa48:6d9c:290::1 to 1.0.0.0....9.2.0.c.9.d.6.8.4.a.f.7.0.6.2.
+    """
+    q=p.split("::")  			  # create initial list of quads
+    ql=q[0].split(":")
+
+    if len(q) > 1:
+    	qr=q[1].split(":")
+        zerostuff=8 - len(ql) - len(qr)
+        q = ql + ['0'] * zerostuff + qr       # correct number of quads
+    else:
+	ql[-1]='0'
+        zerostuff=8 - len(ql) 
+        q = ql + ['0'] * zerostuff        # correct number of quads
+
+    q = [ "%04x" % int(i,16) for i in q ] # insert leading zeroes.
+    c = list(''.join(q))	          # now chars, not quads.
+    c.reverse()	
+    return '.'.join(c)
+
+
+def parse_comment( c ):
+    """
+       given:  'MAC=hoho scope=internal'
+       return  { 'MAC':'hoho', scope:'internal' }
+    """
+    items = c.split()
+    it = {}
+    for i in items:
+        ii=i.split('=')
+        if len(ii) > 1:
+           if ii[1] == 'True' :
+              val=True
+           elif ii[1] == 'False':
+              val=False
+           else:   # numeric? later?
+              val=ii[1]
+    
+        else:
+           val=True
+        it[ii[0]]=val
+
+    return it
+
+def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx ):
+    """
+       fwd_map, write out a zone file.
+	also writes the reverse ipv6 file... how did that happen?
+    """
+
+    print "fwd_map of %s" % domain
+
+    if netpfx != '':
+   	v6rev=open( w + "/" + "dbr." + netpfx, 'w')
+    	v6origin=ipv6hex2dotpfx(netpfx)
+ 	v6rev.write( "$ORIGIN %s.ip6.arpa.\n" % v6origin ) 
+
+    exmap=open( w + "/" + "dbf.public." + domain['DNS-Domain'], 'w')
+    inmap=open( w + "/" + "dbf.internal." + domain['DNS-Domain'], 'w')
+    exmap.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
+    inmap.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
+
+    if netpfx != '':
+    	v6rev.write( "$TTL %d\n" % 86400 )   
+
+    exmap.write( preamble )
+    inmap.write( preamble )
+    if netpfx != '':
+    	v6rev.write( preamble )
+    inmap.write( otherrecords )
+    if netpfx != '':
+    	v6rev.write( otherrecords )
+    exmap.write( otherrecords )
+    for i in hosts :
+
+	 if 'ip4addr' in i.keys():
+             inmap.write( "%s IN A %s\n"  % ( i['hostname'], i['ip4addr'] ))
+	     if ( 'public' in i.keys() ): 
+                exmap.write( "%s IN A %s\n"  % ( i['hostname'], i['ip4addr'] ))
+
+	 # pick auto addresses for now... no DHCP...
+	 if ( 'ip6addrauto' in i.keys() ) :
+	       a='ip6addrauto'
+	 elif ( 'ip6addrfixed' in i.keys() ) :
+	       a='ip6addrfixed'
+	 else:
+	       a=''
+
+         if a != '':
+	       #for a in [ 'ip6addrfixed', 'ip6addrauto' ]:
+	       #if a in i.keys():
+	       ip6addr = i[a]
+               inmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], ip6addr) )
+	       if ( 'public' in i.keys() ): 
+                  exmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], ip6addr) )
+	       else: # we do not control reverse maps for public addresses, so only write in internal case.
+    		   if netpfx != '':
+                  	v6rev.write( "%s IN PTR %s.%s.\n" \
+				% ( i6h2daddr(ip6addr)[0:31], \
+				i['hostname'], domain['DNS-Domain'] ))
+
+    inmap.close()  
+    exmap.close()  
+
+    if netpfx != '':
+    	v6rev.close()
+
+    return
+
+
+def reverse_map(w, r, preamble, otherrecords, hosts, domain):
+    """
+       reverse_map, write out a reverse zone file.
+           pick the hosts from the list which are in the zone, creating a record for each one.
+    """
+    bits=r.split('/')
+    netmask=bits[1]
+    dotted=bits[0].split('.')
+    dotted.reverse()
+    iarpa= '.'.join(dotted) + '.in-addr.arpa.'
+    dotted.reverse()
+    map=open( w + "/" + "dbr." + bits[0], 'w')
+    map.write( "$ORIGIN %s\n" % iarpa )
+    map.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
+    map.write( preamble  )
+    map.write( otherrecords  )
+    for i in hosts :
+       if 'ip4addr' in i.keys():
+          net = i['ip4addr'].split('.')
+          if ( net[0] == dotted[0] ) and ( net[1] == dotted[1] ) and ( net[2] == dotted[2] ) :
+	      map.write("%s in PTR %s.%s.\n" % ( net[3], i['hostname'], domain ))
+       
+    map.close()
+    return
+
+def namedconflocal(w, networks, ipv6pfx, domain ):
+   print "networks: ", networks
+   print "ipv6pfx: ", ipv6pfx
+   print "domain: ", domain
+   
+   nl = open( w + "/named.conf.local", "w" )
+   nl.write( "acl internal {\n" );
+   for n in networks:
+	nl.write( "\t%s;\n" % n );
+
+   if ipv6pfx != '':
+   	nl.write( "\t%s:/64;\n" % ipv6pfx )
+
+   nl.write( "};\n\n" )
+   nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
+   nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
+   nl.write( "\tinclude \"%s/dbr.empty-zones\";\n\n" % w )
+   nl.write( "\tzone \"%s\" { type master; file \"%s/dbf.internal.%s\"; allow-update { none; }; }; \n" % \
+		( domain, w, domain ) ) 
+   for n in networks:
+	nas = n.split('.')
+       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa\" { type master; file \"%s/dbr.%s.%s.%s\"; allow-update { none; }; };\n\n" \
+			% ( nas[2].split('/')[0], nas[1], nas[0], w, nas[0], nas[1], nas[2].split('/')[0] ))
+
+   if ipv6pfx != '':
+      nl.write( "\tzone \"%s.ip6.arpa\" { type master; file \"%s/dbr.%s\"; allow-update { none; }; };\n\n" \
+	% ( ipv6hex2dotpfx(ipv6pfx), w, ipv6pfx ) )
+   nl.write( "};\n\n" )
+
+   nl.write( "view \"public\" { match-clients { any; }; recursion no;\n\n " ) 
+   nl.write( "\tzone \"%s\" { type master; file \"%s/dbf.public.%s\"; allow-update { none; }; }; \n" % \
+		( domain, w, domain ) ) 
+   nl.write( "};\n\n" )
+   nl.close()
+
+def namedconf( w ):
+   nc = open( w + "/named.conf", "w" )
+   nc.write( "include \"%s/named.conf.local\";\n" % w );
+   nc.write( "include \"%s/named.conf.options\";\n" % w );
+   nc.close()
+
+def namedconfoptions( w, forwarders ):
+   """
+options {
+        directory "/var/cache/bind";
+        forwarders { 2620:0:ccc::2; 2620:0:ccd::2; };
+        auth-nxdomain no;    # conform to RFC1035 -- FIXME really a good idea?
+        listen-on-v6 { any; };
+        version "pointy eared, sharp clawed";
+};
+   """
+   print "Forwarding dns servers are: ", forwarders
+   no = open( w + "/named.conf.options", "w" )
+   no.write( "options { \n\tdirectory \"/var/cache/bind\";\n" )
+   no.write( "\tforwarders { %s; };\n" % ';'.join(forwarders) )
+   no.write( "\tauth-nxdomain no;\n" )
+   no.write( "\tlisten-on-v6 { any; };\n" )
+   no.write( "\tversion \"hairy ears can be radishing\";\n" )
+   no.write( "};\n" )
+   no.close()
+   
+def nameconfstatic(w):
+
+   s = open( w + "/named.conf.default-zones", "w" )
+   s.write( ' zone "." { type hint; file "/etc/bind/db.root"; }; ' )
+   s.write( ' zone "localhost" { type master; file "/etc/bind/db.local"; };  ' )
+   s.write( ' zone "127.in-addr.arpa" { type master; file "/etc/bind/db.127"; };  ' )
+   s.write( ' zone "0.in-addr.arpa" { type master; file "/etc/bind/db.0"; };  ' )
+   s.write( ' zone "255.in-addr.arpa" { type master; file "/etc/bind/db.255"; };  ' )
+   s.close()
+    
+def dhcp_map( w, hosts, preamble, postamble ):
+    """
+       dhcp_map, given a preamble, and a list of host information, prints out a dhcpd configuration file.
+    """
+    map=open(w + "/" + "dhcpd.conf","w")
+    map.write( preamble  )
+    for i in hosts :
+      if 'MAC' in i.keys():
+        if i['MAC'] != '':
+           map.write( \
+             "host %s { hardware ethernet %s; " % (i['hostname'], i['MAC']) + \
+             " fixed-address %s; " %  i['ip4addr'] +   \
+             " }\n"  )
+             #+ " fixed-address6 %s; " % i['ip6addrfixed']  +  
+    map.write( postamble  )
+    map.close()
+
+def master_clean(w):
+    """ remove the files with names based on the data.  If the data changes, these files will be left hanging around.
+	for example, the ipv6 reverse map will change name every time ISP DHCP gives us a different address.
+    """
+    print "master clean"
+    for i in os.listdir(w):
+	if fnmatch.fnmatch(i,"db[fr].*"):
+		print 'Removing: ', i
+		os.unlink(w + "/" + i)
+     
+
+def master_parse(w, zf ):
+    zd=''
+    hosts=[]
+    networks = []
+    domains = {}
+    interfaces = all_ipv4_interfaces()
+    ipv6interfaces = all_ipv6_interfaces()
+    ipv6started=False
+    ipv6pfx=''
+    
+    f=open(zf,'r')
+    l=f.readline()
+    dhcp_hosts_started=False
+    dhcp_preamble=""
+    dhcp_postamble=""
+    otherFwdRecords=""
+    preamble=""
+    # would have preferred a human legible date, but out of range (only 32 bit?)
+    #serial=time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))
+    serial="%d" % int(time.time())
+    while( l != "" ):
+        if l.count(';') > 0: # there is a comment.
+	   aopts=parse_comment(l.split(';')[1])
+        else:
+	   aopts={}
+
+        line=l.split()
+
+        if 'DNS-Network' in aopts:
+                if aopts['DNS-Network'] == 'radvd':
+		    radf=open("/etc/radvd.conf", "r")
+                    l=radf.readline().split()
+                    while (len(l) == 0 or l[0] != "prefix" ):
+                       radl=radf.readline()
+                       l=radl.split()
+                    if len(l) > 1 and l[0] == 'prefix':
+                        ipv6pfx=l[1][0:-4]
+                    else:
+			ipv6pfx=":dead:beef:dead:beef:"
+                    radf.close()
+		    network=ipv6pfx
+                    ipv6started=True
+                else:
+                    network=aopts['DNS-Network'][:-3] + '.'  # assumed /24...
+                    networks.append(aopts['DNS-Network'])
+                print "network set to: %s" % network
+	elif 'DNS-Forwarders' in aopts:
+	        forwarders = aopts['DNS-Forwarders'].split(',')
+
+        elif 'DNS-Domain' in aopts :
+                domains[aopts['DNS-Domain']] = copy.deepcopy(aopts)
+		zd=aopts['DNS-Domain']
+
+        if len(l) >= 6:
+           if line[0][0:6] == ';DHCP-' :
+		if line[0][6:] == "hosts":
+			dhcp_hosts_started=True
+		elif dhcp_hosts_started:
+                    dhcp_postamble += l[6:] 
+		else:
+                    dhcp_preamble += l[6:] 
+		
+
+        if len(line) >= 3:
+           if line[0] == ';SOA':
+	       # FIXME: fragile... but works for every zone I have seen.
+               line[0] = '@ in SOA '
+               line[1] += '.' + zd
+               line[2] += '.' + zd
+               line.insert( 4, "%s" % serial )
+               preamble = ' '.join(line) + "\n"
+	       while ( l.find(')') < 0 ):
+                  l = f.readline() 
+                  preamble += l
+               l = f.readline()
+	       continue
+
+	   # Samples:
+           #  	IN      NS      patte.bsqt.homeip.net.
+     	   #	IN	A	67.202.109.157
+	   #	IN TXT "v=spf1 include:_spf.google.com +all"
+           #    bluray IN A 192.168.10.5 ; MAC=70:58:12:77:0a:de
+           #    trestler IN A eth1 ; public
+	   if line[0] == 'IN':
+		lhs='@'
+		ini=0
+	   else:
+		lhs=line[0]
+		ini=1
+		
+	   if line[ini+1] == 'A' : # normal host entry
+               if not 'MAC' in aopts:
+		    aopts['MAC']='' 
+	       else:
+		    if ipv6started:
+                       aopts['ip6addrauto'] = "%s%s" % ( ipv6pfx, mac2eui(aopts['MAC']))
+
+               if line[ini+2].count('.') > 0:
+		    aopts['ip4addr'] = line[ini+2]
+               else:
+		    if line[ini+2] in interfaces:
+			aopts['ip4addr'] = get_ipv4_address(line[ini+2])			
+		    else:
+	            	aopts['ip4addr'] = network + line[ini+2]
+		        if ipv6started:
+	                   aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(line[ini+2]))
+
+	       aopts['hostname'] = lhs
+	       hosts.append(copy.deepcopy(aopts))
+
+	   elif line[ini+1] == 'AAAA' :
+               if not 'MAC' in aopts:
+		    aopts['MAC']='' 
+	       else:
+                    aopts['ip6addrauto'] = "%s%s" % ( ipv6pfx, mac2eui(aopts['MAC']))
+
+	       for i in ipv6interfaces:
+                    if (i['scope'] == 'Global') and (i['interface'] == line[ini+2]):
+			    aopts['hostname']  = lhs
+			    aopts['ip6addrfixed'] = i['address']
+	       		    hosts.append(copy.deepcopy(aopts))
+		
+           elif line[ini+1] == 'MX' or line[ini+1] == 'NS' or line[ini+1] == 'TXT' or \
+                line[ini+1] == 'CNAME' :
+		if ini == 0:
+                     otherFwdRecords += lhs + l
+		else:
+                     otherFwdRecords += l
+
+
+
+        l=f.readline()
+ 
+    f.close()
+    hosts.sort(key=operator.itemgetter('hostname'))
+
+    dhcp_map( w, hosts, dhcp_preamble, dhcp_postamble )
+
+    for d in domains:
+       fwd_map(w, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx )
+
+    for r in networks:
+       reverse_map( w, r, preamble, otherFwdRecords, hosts, zd )
+       
+    namedconflocal( w, networks, ipv6pfx, zd )
+    namedconfoptions( w, forwarders )
+    namedconf( w )	
+    empty_internal_reverse_zones(w, networks)
+    return
+
+
+
+if __name__ == '__main__':
+
+    masterfile="/etc/bind/si46.master"
+    write2dir="/etc/bind"
+    opts, args = getopt.getopt(sys.argv[1:],"r:vw:z:",[ "read-from-file", "version" , "write-to-dir", "zone" ])
+
+    for o, a in opts:
+	if o in ( "-r", "--read-from-file" ):
+	   masterfile=a
+	if o in ( "-w", "--write-to-dir" ):
+	   write2dir=a
+	if o in ( "-d", "--domain" ):
+           zonedomain=a
+        if o in ( "-z", "--zone" ):
+           masterfile=a
+    
+    master_clean(write2dir)
+    master_parse(write2dir, masterfile )
+       
+

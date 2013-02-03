@@ -1,0 +1,83 @@
+;DNS-Domain=example.com 
+
+; Glorious example that shows a variety of records for a reasonably complicated
+; network.
+
+;SOA patte peter ( 3h 15m 3w 3h )
+
+ IN NS public.example.com. ; public
+ IN NS trestler.example.com. ;
+
+; If you use google apps, then a good for your domain look like include:
+;   -- a TXT record for Sender Policy Framework, the +all allows hosts
+;      in your network to send mail, likely NATted, as well as Google's servers.
+;   -- MX records as per Google. 
+;   -- the CNAME entry, as per Google.
+;
+ IN TXT "v=spf1 include:_spf.google.com +all"
+
+; MX records
+ 86400 IN MX 10 ASPMX.L.GOOGLE.COM.  ; public
+ 86400 IN MX 20 alt1.aspmx.l.google.com. ; public
+ 86400 IN MX 20 alt2.aspmx.l.google.com. ; public
+ 86400 IN MX 30 aspmx2.googlemail.com. ; public
+ 86400 IN MX 30 aspmx3.googlemail.com. ; public
+ 86400 IN MX 30 aspmx4.googlemail.com. ; public
+ 86400 IN MX 30 aspmx5.googlemail.com. ; public
+
+public    	IN	A	111.222.121.212 ; public
+
+; script will assign trestler the address on eth1.
+trestler	IN 	A	eth1 ; public
+
+
+; name verification for Google Apps for your domain.
+googlebcbgobblydgook.example.com IN CNAME google.com. ; public
+
+;
+; Hosts in example.com
+;
+
+; the network for vpns.
+;DNS-Network=192.168.9/24
+public-vpn IN A 1 ; 
+diaspora-vpn IN A 2 ; 
+
+; Internal networks.
+
+; IP v6 support comes here:
+;DNS-Network=radvd
+;DNS-Network=192.168.10/24
+
+;DHCP-option domain-name "example.com" ;
+;DHCP-option domain-name-servers 192.168.10.1, 192.168.10.6  ;
+;DHCP-option routers 192.168.10.1 ;
+;DHCP-option subnet-mask 255.255.255.0 ;
+;DHCP-default-lease-time 86400 ;
+;DHCP-max-lease-time 200000 ;
+;DHCP-authoritative ;
+;DHCP-hosts ;  host declarations will be inserted here.
+;DHCP-subnet 192.168.10.0 netmask 255.255.255.0 { 
+;DHCP-   range 192.168.10.130  192.168.10.135 ;
+;DHCP-   option broadcast-address 192.168.10.255 ;
+;DHCP-   option domain-name-servers 192.168.10.1, 192.168.10.6 ;
+;DHCP-   option routers 192.168.10.9 ;
+;DHCP-}
+
+trestler IN A 1 ; MAC=00:01:c0:02:f6:da
+trestler IN AAAA 6rdif ; public
+idefix IN A 2 ; MAC=58:94:6b:bb:cd:8c
+debvm IN A 3 ; MAC=52:54:00:f8:b5:26
+cn3ds IN A 29 ; MAC=e8:3e:b6:15:d6:16
+
+mfsmaster IN A 49 ;
+mfsmaster1 IN A 50 ;
+
+guest130 IN A 130
+guest131 IN A 131
+guest132 IN A 132
+guest133 IN A 133
+guest134 IN A 134
+guest135 IN A 135
+
+

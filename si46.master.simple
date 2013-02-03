@@ -1,0 +1,13 @@
+;DNS-Domain=example.com 
+;SOA fwgw hostmaster ( 3h 15m 3w 3h )
+
+ IN NS fwgw.example.com. 
+
+ 86400 IN MX 10 fwgw.example.com. 
+
+fwgw    	IN	A	123.142.254.10 ; public
+
+;DNS-Network=192.168.10/24
+;DNS-Forwarders=123.142.225.1,123.142.227.2
+
+debvm IN A 3 ; MAC=52:54:00:f8:b5:26

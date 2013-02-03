@@ -1,0 +1,99 @@
+
+Si46ib9d - Setup IPv4 and IPv6 for ISC Bind9 and DHCP.
+
+Wordy Background Material not of interest to Practcal People
+
+This script uses a single data file, that looks a lot like an ISC forward 
+zone file, but adds 'decorations' (more information as comments) to allow 
+it to be used to build the entire configuration.  
+
+The single data file is much simpler to maintain and is meant for editing 
+by humans.  Once the domain and network decorators are set, adding
+a new machine, is just a one line entry:
+
+  debvm IN A 3 ; MAC=52:54:00:f8:b5:26
+
+The above line will create an entry for the machine named 'debvm' with
+the fixed IP address. 
+In a DHCP and Bind configuration for IPv4 and IPv6, you need, 
+for example, to enter a hostname:
+
+	-- in the IPv4 forward map for a domain, along with ip addr.
+	-- in the reverse map same is repeated.
+	-- in the IPv4 dhcp map have both hostname and address, as well as MAC.
+	-- in the IPv6 fwd map stateless auto config is calculated from MAC 
+	-- in the IPv6 dhcp map has both hostname and address, as well as MAC.
+
+So you have to enter the hostname, mac, and address between three and 
+six times.  This script eliminates that sort of repetitive drudgery.
+by making some assumptions:
+
+	-- use for one domain.  This domain is the entire bind config.
+	-- for every forward address on a defined network, 
+	   make the obvious reverse record.
+	-- Create two ISC-Bind 9 views:  internal, and public.  by default, 
+           all host records are internal.  You need to decorate an entry with 
+	   public, to have the entry added to the public view.
+	-- @ (domain) records MX, TXT, NS, by default, are in all views.
+	-- there are no DNS keys or updates ´update none´ use SSH or
+	   some other mechanism to distribute new zones.
+	-- There is a main, flat network 
+	-- currently, support RADVD - IPv6 Router Advertisement Daemon.
+	-- bind9 and bind9utils are installed, as per Debian wheezy.
+	   to provide all the static domains in /etc/bind/db.* (0, 127, empty, etc...)
+           tool refers to these in their standard place.
+
+These assumptions create a configuration which is likely suitable for 
+many small businesses or (geeky!) homes.  If you don't want a public
+view, do not run the configuration on a public facing server, and it
+will not be a problem.  if a firewalling mistake grants an external user
+access to the internal network, they will only get the public view,
+which is still a benefit.  
+
+The script is can be run regularly to re-create zones when using a system 
+with an ISP provided dynamic address, allocted by some mechanism such as 
+DHCP.  The one departure from making the si46.master file a valid forward
+zone is that one can place an interface address in place of an IP (4 or 6)
+address in the file, which is assumed to be on the machine where the script 
+is run.  If you can run the script on the router, then the dynamic addresses
+are automatically picked up.
+
+
+apt-get install bind9 bindutils isc-dhcp-server
+
+# The configuration built depends on the default installation for some static files.
+# /etc/bind/db.0, db.root, db.127, etc... files which are never overwritten, so 
+# just referred to. 
+
+#test to avoid overwriting real config:
+si46ib9d -r ./si46.master.simple -w `pwd`
+
+named-checkconf -z named.conf
+
+
+
+BUGS:
+   -- some hard references to /etc/bind.
+
+
+TODO - Improvements I would like to do
+
+Run on other machines.
+   This script works a lot better/more automagically if it is run
+   on the gateway firewall.  Many use an appliance as a firewall, rather
+   than a real debian host.  The script uses /etc/radvd.conf and the interface
+   addresses on the gateway hosts to build the zone.  It would be better
+   if the script would notice, at a client level, parameters and use
+   them, rather than have to run on the gateway.
+
+Build whole named configuration.
+   currently builds: named.conf.local, all fwd and rev zones.
+   but not: named.conf, named.conf.options, zone.empty.
+   these files are pretty trivial, did not see the point, but
+   if you do not create them, the checkconf remains reliant on /etc/bind.
+
+Support DHCPv6.
+   Currently IPv6 uses SLAC and radvd.  fixed addresses for DHCPv6
+   are calculated but not building the config file yet.
+
+
