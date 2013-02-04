@@ -1,11 +1,152 @@
 
 Si46ib9d - Setup IPv4 and IPv6 for ISC Bind9 and DHCP.
 
-Wordy Background Material not of interest to Practcal People
+Introduction
+
+Minimum configuration is given by what below:
+
+--
+
+  ;DNS-Domain=example.com 
+  ;SOA fwgw hostmaster ( 3h 15m 3w 3h )
+
+   IN NS fwgw.example.com. 
+
+  fwgw    	IN	A	123.142.254.10 ; public
+
+  ;DNS-Forwarders=123.142.225.1,123.142.227.2
+
+  ;DNS-Network=192.168.10/24
+
+  onehost IN A 3 ; MAC=52:54:00:f8:b5:26
+
+--
+
+If you look at the documentation for bind, you will find that a semi-colon (;) 
+is used as a comment delimiter.  If there is text on a line before a any
+semi-colon, then is is a normal part of a bind forward map.  si46 directives
+happen in the comments.  The directives are case and space sense.
+
+The first si46 directive is ;DNS-Domain, the value you set there is the 
+domain you want to use for the file.  Here we are building a configuration
+for example.com.  The second line is ;SOA.  This line is used to build
+the Start Of Authority, a header needed for all the forward and reverse 
+zones.  Documentation of SOA records is available in bind documentation.
+Briefly, the elements are:
+
+	fwgw - the host on which the zone was created. (expands to: fwgw.example.com)
+	hostmaster - admin email address  (expands to: hostmaster@example.com)
+
+The rest of the SOA is given sensible default.  si46 generates the serial number 
+from the linux time stamp (seconds since start of epoch.)  and allows you to
+override the other settings (see si46.master.glorious for an example.)
+
+   IN NS fwgw.example.com. 
+
+All zones need a name server, and use the ones declared here.
+You must declare it with the full domain name (and incude the '.' at the end.)
+Next is the corresponding host entry for fwgw.  The enty looks like a
+a normal bind forward A record, used to define an IPv4 address.
+
+  fwgw    	IN	A	123.142.254.10 ; public
+
+fwgw's public IPv4 address (since it is an A record) is set to 123.142.254.10
+The 'public' decoration, after the semi-colon indicates that this record
+will be published to the world, and not just to internal users.
+
+  ;DNS-Forwarders=123.142.225.1,123.142.227.2
+
+The DNS-Forwarders directive is where you put your ISP's DNS Server addresses (or some other provider.)
+The configuration will be such that the server will answer requests for the local domain,
+refer to the Forwarders for names outside the domain, and cache the replies for internal users.
+
+The next directive is to declare a network.
+
+  ;DNS-Network=192.168.10/24
+   
+This means that:
+	-- addresses that follow, if not complete, should be assumed to be in this network.
+	-- a reverse map for this network will be created.
+
+You may have noticed that the network in this case, is a 192.168... network.  This is a 
+non-routable address range.  There is an assumption that, for IPv4, the firewall gateway
+is taking care of NAT.
+
+So with all that out of the way, here is what you need to declare machines on your network:
+
+  onehost IN A 3 ; MAC=52:54:00:f8:b5:26
+
+So there is a machine named 'onehost' whose MAC address is given.  onehost's IP address will
+be 192.168.10.3.  The DHCP configuration will be made for onehost to be always be given
+the same address, if asked.  If IPv6 is enabled, the MAC address can also be used to
+calculate the Stateless autoconfiguration (SLAC) address, or for dhcpv6.
+
+To make use of this configuration file, you need to have bind9 and isc-dhcp-server installed:
+
+apt-get install bind9 bindutils isc-dhcp-server
+
+#test to avoid overwriting real config:
+si46ib9d -r ./si46.master.simple -w `pwd`
+
+for the simple example, si46ib9d creates: named.conf, named.conf.options, named.conf.local, 
+dbf.internal.example.com, dbf.public.example.com, dbr.192.168.10, dbr.192.168.9,
+dbr.empty-zones, dhcpd.conf, named.conf, named.conf.local, named.conf.options
+
+#do syntax check of the setup:
+named-checkconf -z named.conf
+
+
+Once you are happy that the configuraion looks good, copy it to the standard /etc/bind location.
+
+cp si46.master /etc/bind
+
+Then you can invoke si46ib9d without arguments and it will place all the config
+files and zones under /etc/bind.
+
+  twohost IN A 4 ; MAC=51:54:e0:f3:b5:26
+
+When you want to add hosts, you just add a single line per host, as per onehost 
+above.  Then re-run si46ib9d and the forward, reverse, and DHCP information will 
+all be updated.  This ends the walk-through the simplest case, IPv4 only.
+
+Dealing with DHCP and guests.
+
+Adding IPv6.
+
+My ISP has deployed IPv6 using the Rapid Deployment (RD) protocol.
+Using DHCP extensions, the Router Advertisement Daemon (radvd) has been configured
+to announce addresses whenever the ISP link is brought up.  Unlike IPv4, where
+networks inside are isolated from the outside via Network Address Translation,
+or addresses are permanently assigned, in IPv6, there is the notion of "rapid-renumbering"
+and the addresses assigned by my ISP change from time to time.
+
+Whenever the IPv6 network address changes, there is no NAT, so all the addresses
+on the internal zone have to change as well.  With si46ib9d, I supply the following
+directives:
+
+   ;DNS-Network=radvd
+
+   trestler	IN 	A	eth1 ; public
+
+   trestler IN AAAA 6rdif ; public
+
+The DNS-Network directive makes the script consult /etc/radvd.conf to determine
+the network prefix in effect.  Si46ib9d will try to assign for all later host records 
+in the file.  The host entries that follow, instead of having an address,
+indicate the interface from which the address should be read.  Whenever the program
+is run,  the interface and radvd.conf file information is refreshed, and the zones
+re-written completely.
+
+
+
+
+Motivation for this script.
 
 This script uses a single data file, that looks a lot like an ISC forward 
 zone file, but adds 'decorations' (more information as comments) to allow 
-it to be used to build the entire configuration.  
+it to be used to build the entire configuration.  It is also much more
+information dense, one can look at a few lines, at most a page of configuration
+and understand the general setup.  
 
 The single data file is much simpler to maintain and is meant for editing 
 by humans.  Once the domain and network decorators are set, adding
@@ -28,7 +169,7 @@ So you have to enter the hostname, mac, and address between three and
 six times.  This script eliminates that sort of repetitive drudgery.
 by making some assumptions:
 
-	-- use for one domain.  This domain is the entire bind config.
+	-- The configuration is for a single domain.
 	-- for every forward address on a defined network, 
 	   make the obvious reverse record.
 	-- Create two ISC-Bind 9 views:  internal, and public.  by default, 
@@ -59,21 +200,8 @@ is run.  If you can run the script on the router, then the dynamic addresses
 are automatically picked up.
 
 
-apt-get install bind9 bindutils isc-dhcp-server
-
-# The configuration built depends on the default installation for some static files.
-# /etc/bind/db.0, db.root, db.127, etc... files which are never overwritten, so 
-# just referred to. 
-
-#test to avoid overwriting real config:
-si46ib9d -r ./si46.master.simple -w `pwd`
-
-named-checkconf -z named.conf
-
-
-
 BUGS:
-   -- some hard references to /etc/bind.
+   -- need a way to put in real comments... ;# ?
 
 
 TODO - Improvements I would like to do

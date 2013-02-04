@@ -3,7 +3,7 @@
 ; Glorious example that shows a variety of records for a reasonably complicated
 ; network.
 
-;SOA patte peter ( 3h 15m 3w 3h )
+;SOA patte peter ( 4h 10m 4w 6h )
 
  IN NS public.example.com. ; public
  IN NS trestler.example.com. ;
@@ -24,6 +24,9 @@
  86400 IN MX 30 aspmx3.googlemail.com. ; public
  86400 IN MX 30 aspmx4.googlemail.com. ; public
  86400 IN MX 30 aspmx5.googlemail.com. ; public
+
+
+;DNS-Forwarders=123.142.225.1,123.142.227.2
 
 public    	IN	A	111.222.121.212 ; public
 

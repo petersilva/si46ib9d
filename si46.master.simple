@@ -1,9 +1,7 @@
 ;DNS-Domain=example.com 
-;SOA fwgw hostmaster ( 3h 15m 3w 3h )
+;SOA fwgw hostmaster 
 
- IN NS fwgw.example.com. 
-
- 86400 IN MX 10 fwgw.example.com. 
+ IN NS fwgw.example.com.
 
 fwgw    	IN	A	123.142.254.10 ; public
 
