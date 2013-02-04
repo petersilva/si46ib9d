@@ -25,7 +25,7 @@ Minimum configuration is given by what below:
 If you look at the documentation for bind, you will find that a semi-colon (;) 
 is used as a comment delimiter.  If there is text on a line before a any
 semi-colon, then is is a normal part of a bind forward map.  si46 directives
-happen in the comments.  The directives are case and space sense.
+happen in the comments.  The directives are also case sensitive.
 
 The first si46 directive is ;DNS-Domain, the value you set there is the 
 domain you want to use for the file.  Here we are building a configuration
@@ -43,7 +43,7 @@ override the other settings (see si46.master.glorious for an example.)
 
    IN NS fwgw.example.com. 
 
-All zones need a name server, and use the ones declared here.
+All zones need a name server, so use the ones declared here.
 You must declare it with the full domain name (and incude the '.' at the end.)
 Next is the corresponding host entry for fwgw.  The enty looks like a
 a normal bind forward A record, used to define an IPv4 address.
@@ -105,11 +105,14 @@ files and zones under /etc/bind.
 
   twohost IN A 4 ; MAC=51:54:e0:f3:b5:26
 
-When you want to add hosts, you just add a single line per host, as per onehost 
+When you want to add hosts, you just add a single line per host, as per twohost 
 above.  Then re-run si46ib9d and the forward, reverse, and DHCP information will 
 all be updated.  This ends the walk-through the simplest case, IPv4 only.
 
 Dealing with DHCP and guests.
+
+FIXME: to come, see example in si46.example.glorious
+
 
 Adding IPv6.
 
@@ -133,7 +136,7 @@ directives:
 The DNS-Network directive makes the script consult /etc/radvd.conf to determine
 the network prefix in effect.  Si46ib9d will try to assign for all later host records 
 in the file.  The host entries that follow, instead of having an address,
-indicate the interface from which the address should be read.  Whenever the program
+indicate the interface whose address should be used.  Whenever the program
 is run,  the interface and radvd.conf file information is refreshed, and the zones
 re-written completely.
 
@@ -141,6 +144,11 @@ re-written completely.
 
 
 Motivation for this script.
+
+ISC tools are the most popular ones, but they are built for runing large corporate
+sites, and their configuration methods, allow an almost infinite configurability.
+Further, they have grown somewhat organically over time, and have gotten a bit
+unwieldy now.  
 
 This script uses a single data file, that looks a lot like an ISC forward 
 zone file, but adds 'decorations' (more information as comments) to allow 
@@ -155,9 +163,8 @@ a new machine, is just a one line entry:
   debvm IN A 3 ; MAC=52:54:00:f8:b5:26
 
 The above line will create an entry for the machine named 'debvm' with
-the fixed IP address. 
-In a DHCP and Bind configuration for IPv4 and IPv6, you need, 
-for example, to enter a hostname:
+the fixed IP address.  In a DHCP and Bind configuration for IPv4 and IPv6, 
+you need, for example, to enter a hostname:
 
 	-- in the IPv4 forward map for a domain, along with ip addr.
 	-- in the reverse map same is repeated.
@@ -167,7 +174,8 @@ for example, to enter a hostname:
 
 So you have to enter the hostname, mac, and address between three and 
 six times.  This script eliminates that sort of repetitive drudgery.
-by making some assumptions:
+by picking a particular network design and user case, and making 
+some assumptions:
 
 	-- The configuration is for a single domain.
 	-- for every forward address on a defined network, 
