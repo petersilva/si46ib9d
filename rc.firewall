@@ -1,0 +1,192 @@
+#!/bin/sh
+
+EXTIF="eth1"
+EXTIP="`ifconfig $EXTIF | awk /$EXTIF/'{next}//{split($0,a,":");split(a[2],a," ");print a[1];exit}'`"
+
+
+INTIF="eth0"
+INTIP="192.168.10.1/255.255.255.0"
+INTNET="192.168.10.0/255.255.255.0"
+UNIVERSE="0.0.0.0/0"
+
+cat <<EOT
+Firewalls are fun!
+external interface is $EXTIF, ip=$EXTIP
+internal interface is $INTIF, ip=$INTIP 
+internal network is: $INTNET
+EOT
+
+echo "Set your interfaces and networks properly before running!"
+exit
+
+
+echo "Flush and clean... filter tables"
+iptables -P INPUT DROP  
+iptables -F INPUT 
+iptables -P OUTPUT DROP  
+iptables -F OUTPUT 
+iptables -P FORWARD DROP  
+iptables -F FORWARD 
+iptables -F -t nat
+
+if [ -n "`iptables -L | grep log-drop`" ]; then
+   iptables -F log-drop
+fi
+iptables -F
+
+# Delete all User-specified chains
+iptables -X
+iptables -t nat -X
+#
+# Reset all IPTABLES counters
+iptables -Z
+
+iptables -N log-drop
+#fixme log-drop was too verbose...
+iptables -A log-drop -j LOG --log-level info 
+iptables -A log-drop -j DROP
+
+# loopback interfaces are valid.
+#
+iptables -A INPUT -i lo -s $UNIVERSE -d $UNIVERSE -j ACCEPT 
+
+# local interface, local machines, going anywhere is valid
+# 
+iptables -A INPUT -i $INTIF -s $INTNET -d $UNIVERSE -j ACCEPT 
+
+
+# remote interface, claiming to be local machines, IP spoofing, get lost
+#
+iptables -A INPUT -i $EXTIF -s $INTNET -d $UNIVERSE -j log-drop 
+
+# Allow any related traffic coming back to the MASQ server in
+#
+iptables -A INPUT -i $EXTIF -s $UNIVERSE -d $EXTIP -m state --state ESTABLISHED,RELATED -j ACCEPT 
+
+# DHCPd - Enable the following lines if you run an INTERNAL DHCPd server
+#
+iptables -A INPUT -i $INTIF -p tcp --sport 68 --dport 67 -j ACCEPT 
+iptables -A INPUT -i $INTIF -p udp --sport 68 --dport 67 -j ACCEPT
+
+#
+# Services we want to publish, both for inside and outside access
+#
+
+iptables -A INPUT -i $EXTIF -p udp --dport 53 -j ACCEPT  
+iptables -A INPUT -i $EXTIF -p tcp --dport 53 -j ACCEPT 
+
+# stuff from ISP DNS servers
+iptables -A INPUT -p udp -s 216.58.97.20/32 --source-port 53 -d 0/0 -j ACCEPT
+iptables -A INPUT -p udp -s 216.58.97.21/32 --source-port 53 -d 0/0 -j ACCEPT
+
+# allow ping to gatewway
+iptables -A INPUT -p icmp --icmp-type 8 -s 0/0 -d $EXTIP -i $EXTIF -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
+
+
+
+iptables -A INPUT -p udp --dport 123 -j ACCEPT
+
+iptables -A INPUT -p tcp --dport 25 -j ACCEPT 
+iptables -A INPUT -p tcp -i $EXTIF --dport 443 -j ACCEPT 
+
+# Ftp passive connection...
+iptables -A INPUT -i $EXTIF --dst $EXTIP -p tcp --destination-port 40000:40100 -j ACCEPT
+
+# Remote Access...
+
+# Permit ssh remote access on port 2200 from work to an internal host 
+# let it in, and DNAT it...
+iptables -t nat -A PREROUTING -i $EXTIF --dst $EXTIP -p tcp --dport 2200 -j DNAT --to-destination 192.168.10.6
+# need to forward it afterwards...
+iptables -I FORWARD 1 -p tcp --dport 2200 -j ACCEPT
+
+#
+# minecraft Server
+#
+iptables -t nat -A PREROUTING -i $EXTIF --dst $EXTIP -p tcp --dport 25565 -j DNAT --to-destination 192.168.10.6
+iptables -I FORWARD 1 -p tcp --dport 25565 -j ACCEPT
+
+
+
+#
+# VOIP voice over ip, stuff forward to .12 (phone)
+#
+# SET SIP SERVER INTERNAL IP (LAN)
+SIP_SRV_LAN_IP=192.168.10.12
+
+# FORWARDING
+iptables -t nat -A PREROUTING -i $EXTIF -p udp -m multiport --dport 5060,16384:16482 -j DNAT --to-destination $SIP_SRV_LAN_IP
+
+# ALLOW ASTERISK CONNECTIONS/REPLIES TO OUTSIDE (INTERNET)
+iptables -A FORWARD -p udp -s $SIP_SRV_LAN_IP -j ACCEPT
+
+# ALLOW FORWARDED CONNECTIONS/REPLIES TO INSIDE (LAN)
+iptables -A FORWARD -i $EXTIF -p udp -m multiport --dport 5060,16384:16482 -d $SIP_SRV_LAN_IP -j ACCEPT
+
+
+
+# Stuff we are worried about.
+#
+echo "Rejecting all connections to 137:139" 
+iptables -N NETBIOS 
+iptables -A INPUT -p udp --sport 137:139 -j NETBIOS 
+iptables -A NETBIOS -j LOG --log-prefix "IPTABLES NETBIOS: " 
+iptables -A NETBIOS -j DROP 
+
+echo "Enabling SYN-FLOODING PROTECTION" 
+iptables -N syn-flood 
+iptables -A INPUT -p tcp --syn -j syn-flood 
+iptables -A syn-flood -m limit --limit 3/s --limit-burst 4 -j RETURN 
+iptables -A syn-flood -j DROP 
+
+
+echo "Making sure NEW tcp connections are SYN packets" 
+iptables -A INPUT -p tcp ! --syn -m state --state NEW -j DROP 
+
+echo "Logging fragments caught" 
+iptables -N fragments 
+iptables -A INPUT -f -j fragments 
+iptables -A fragments -j LOG --log-prefix "IPTABLES FRAGMENTS:" 
+iptables -A fragments -j DROP 
+
+# loopback interface is valid.
+iptables -A OUTPUT -o lo -s $UNIVERSE -d $UNIVERSE -j ACCEPT
+
+# transparent proxy recipe from: -- NEVER TESTED!
+# http://broddlit.wordpress.com/2007/09/05/transparent-proxy-as-adblock-using-tinyproxy-and-dansguardian/
+# must modify -uid-owner to match tinyproxy owner... check!
+#iptables -A OUTPUT -t nat ! -d 127.0.0.1 -p tcp –dport 80 -m owner ! –uid-owner nobody -j REDIRECT –to-ports 8080
+#iptables -A POSTROUTING -t nat -o lo -p tcp –dport 8080 -j SNAT –to 127.0.0.1
+
+# local interfaces, any source going to local net is valid
+iptables -A OUTPUT -o $INTIF -s $EXTIP -d $INTNET -j ACCEPT
+
+
+# local interface, any source going to local net is valid
+iptables -A OUTPUT -o $INTIF -s $INTIP -d $INTNET -j ACCEPT
+
+
+# outgoing to local net on remote interface, stuffed routing, deny
+# 
+iptables -A OUTPUT -o $EXTIF -s $UNIVERSE -d $INTNET -j log-drop
+
+
+# anything else outgoing on remote interface is valid
+#
+iptables -A OUTPUT -o $EXTIF -s $EXTIP -d $UNIVERSE -j ACCEPT
+
+
+# FWD: Allow all connections OUT and only existing/related IN"
+iptables -A FORWARD -i $EXTIF -o $INTIF -m state --state ESTABLISHED,RELATED -j ACCEPT
+iptables -A FORWARD -i $INTIF -o $EXTIF -j ACCEPT
+
+# NAT: Enabling SNAT (MASQUERADE) functionality on $EXTIF"
+iptables -t nat -A POSTROUTING -o $EXTIF -j SNAT --to $EXTIP
+
+# Catch all rule(s), all other traffic is denied and logged. 
+#
+iptables -A INPUT -s $UNIVERSE -d $UNIVERSE -j log-drop
+iptables -A OUTPUT -s $UNIVERSE -d $UNIVERSE -j log-drop
+iptables -A FORWARD -j log-drop
+
+exit 0

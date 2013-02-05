@@ -8,7 +8,7 @@ Minimum configuration is given by what below:
 --
 
   ;DNS-Domain=example.com 
-  ;SOA fwgw hostmaster ( 3h 15m 3w 3h )
+  ;SOA fwgw hostmaster 
 
    IN NS fwgw.example.com. 
 
@@ -143,17 +143,17 @@ re-written completely.
 
 
 
-Motivation for this script.
+Motivation for the si46ib9d script.
 
 ISC tools are the most popular ones, but they are built for runing large corporate
-sites, and their configuration methods, allow an almost infinite configurability.
-Further, they have grown somewhat organically over time, and have gotten a bit
-unwieldy now.  
+sites, and their configuration methods, allow an almost infinite configurability, and
+are quite intimidating in the number of decisions they ask.  Further, they have grown 
+somewhat organically over time, and have gotten a bit unwieldy.  
 
 This script uses a single data file, that looks a lot like an ISC forward 
-zone file, but adds 'decorations' (more information as comments) to allow 
+zone file, but adds 'decorations' (directives hidden in zone file comments) to allow 
 it to be used to build the entire configuration.  It is also much more
-information dense, one can look at a few lines, at most a page of configuration
+information dense, one can look at a few lines, at most a page, of configuration
 and understand the general setup.  
 
 The single data file is much simpler to maintain and is meant for editing 
@@ -184,8 +184,8 @@ some assumptions:
            all host records are internal.  You need to decorate an entry with 
 	   public, to have the entry added to the public view.
 	-- @ (domain) records MX, TXT, NS, by default, are in all views.
-	-- there are no DNS keys or updates ´update none´ use SSH or
-	   some other mechanism to distribute new zones.
+	-- there are no DNS keys or updates ´update none.´ Use SSH or
+	   some other mechanism to distribute updates.
 	-- There is a main, flat network 
 	-- currently, support RADVD - IPv6 Router Advertisement Daemon.
 	-- bind9 and bind9utils are installed, as per Debian wheezy.
@@ -223,13 +223,31 @@ Run on other machines.
    them, rather than have to run on the gateway.
 
 Build whole named configuration.
-   currently builds: named.conf.local, all fwd and rev zones.
-   but not: named.conf, named.conf.options, zone.empty.
+   currently builds: named.conf.local, all fwd and rev zones,
+   named.conf, named.conf.options, but not: zone.empty,
+   db.0, db.127, db.root, etc...
    these files are pretty trivial, did not see the point, but
    if you do not create them, the checkconf remains reliant on /etc/bind.
+
+Improve DHCPv4 automation
+   pick an address range automatically.
+   automatic guest addresses.
+   add email notification for guests.
+   add a donjeon mode... (wrong router?, wrong net?) for guests.
 
 Support DHCPv6.
    Currently IPv6 uses SLAC and radvd.  fixed addresses for DHCPv6
    are calculated but not building the config file yet.
 
+
+Other Stuff:  Firewall Scripts included at no extra cost!
+
+Have a look at the interfaces and rc*firewall scripts.  They give an
+idea about how to set that up as well.  In IPv4 you use NAT, but with
+IPv6, firewalls do not have to work so hard, you just limit what they
+can access with lists.
+	
+FIXME:
+	- sysctl ip_forward ?
+	- 
 

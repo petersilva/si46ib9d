@@ -1,0 +1,86 @@
+#!/bin/sh
+#
+#  Sample ip6tables firewall configuration script.
+#     this is meant to run on a debian server placed as a firewall/gateway.
+#
+#  Need to set two things:
+#	EXTIF -- the external interface which faces the Internet and ISP.
+#       INTIF -- The interface which faces the internal network.
+#
+#        once they are set, you can remove the ´exit´ line.
+#
+#	suggest you are connected locally, as tesing firewalls over 
+#	the net often ends badly.
+#
+#	Have Fun!
+#
+
+EXTIF="6rdif"
+INTIF="eth3"
+INTNET="`awk '/prefix/ { print $2; }; ' /etc/radvd.conf`"
+
+echo "set your interfaces by editing the script first."
+exit
+
+echo "Flush and clean... filter tables"
+ip6tables -P INPUT DROP  
+ip6tables -F INPUT 
+ip6tables -P OUTPUT DROP  
+ip6tables -F OUTPUT 
+ip6tables -P FORWARD DROP  
+ip6tables -F FORWARD 
+
+if [ -n "`ip6tables -L | grep log-drop`" ]; then
+   ip6tables -F log-drop
+fi
+ip6tables -F
+
+# Delete all User-specified chains
+ip6tables -X
+#
+# Reset all IPTABLES counters
+ip6tables -Z
+
+ip6tables -N log-drop
+ip6tables -A log-drop -j LOG --log-level info 
+ip6tables -A log-drop -j DROP
+
+#
+#  i/o on interfaces by this machine is always valid.
+#  (rules for this host)
+#
+ip6tables -A INPUT -i lo -j ACCEPT 
+ip6tables -A OUTPUT -o lo -j ACCEPT
+ip6tables -A INPUT -i $INTIF -j ACCEPT 
+ip6tables -A OUTPUT -o $INTIF -j ACCEPT
+# note: only let in responses to locally initiated connections.
+ip6tables -A INPUT -i $EXTIF -m state --state ESTABLISHED,RELATED -j ACCEPT 
+ip6tables -A OUTPUT -o $EXTIF -j ACCEPT
+
+
+#
+# Gateway Forwarding  (rules for packets to $INTNET)
+# 
+
+# remote interface, claiming to be local machines, IP spoofing, get lost
+# FIXME...
+ip6tables -A FORWARD -i $EXTIF -s $INTNET -j log-drop 
+
+# FWD: Allow all connections OUT and only existing/related IN"
+# Allow any related traffic coming back ...
+#
+ip6tables -A FORWARD -i $EXTIF -d $INTNET -m state --state ESTABLISHED,RELATED -j ACCEPT 
+ip6tables -A FORWARD -i $INTIF -o $EXTIF -j ACCEPT
+
+#
+# Services we want to publish, both for inside and outside access
+#
+# (none on ipv6 yet)
+
+# Catch all rule(s), all other traffic is denied and logged. 
+#
+ip6tables -A INPUT -j log-drop
+ip6tables -A OUTPUT -j log-drop
+ip6tables -A FORWARD -j log-drop
+
+exit 0

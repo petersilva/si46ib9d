@@ -1,0 +1,18 @@
+# example of /etc/network/interfaces
+auto lo
+iface lo inet loopback
+
+auto eth0
+iface eth0 inet static
+     address 192.168.10.1
+     network 192.168.10.0
+     netmask 255.255.255.0
+     gateway 192.168.10.1
+
+auto eth1
+iface eth1 inet dhcp
+     dns-domain example.com
+     dns-search example.com
+     dns-nameservers 127.0.0.1
+     post-up /etc/network/rc.firewall
+     post-up /etc/network/rc.6.firewall
