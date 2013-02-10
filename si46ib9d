@@ -399,6 +399,7 @@ def master_parse(w, zf ):
     zd=''
     hosts=[]
     networks = []
+    network='Declared.too.late.'
     domains = {}
     interfaces = all_ipv4_interfaces()
     ipv6interfaces = all_ipv6_interfaces()
@@ -416,12 +417,14 @@ def master_parse(w, zf ):
     #serial=time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))
     serial="%d" % int(time.time())
     while( l != "" ):
+
+        line=l.split()
+
+
         if l.count(';') > 0: # there is a comment.
 	   aopts=parse_comment(l.split(';')[1])
         else:
 	   aopts={}
-
-        line=l.split()
 
         if 'DNS-Network' in aopts:
                 if aopts['DNS-Network'] == 'radvd':
@@ -447,6 +450,9 @@ def master_parse(w, zf ):
         elif 'DNS-Domain' in aopts :
                 domains[aopts['DNS-Domain']] = copy.deepcopy(aopts)
 		zd=aopts['DNS-Domain']
+	elif len(line) < 2 or line[0] == ';' :
+        	l=f.readline()
+		continue
 
         if len(l) >= 6:
            if line[0][0:6] == ';DHCP-' :
@@ -489,7 +495,10 @@ def master_parse(w, zf ):
                if not 'MAC' in aopts:
 		    aopts['MAC']='' 
 	       else:
-		    if ipv6started:
+		    if len(aopts['MAC'].split(':')) != 6:
+			print 'bad MAC length:', aopts['MAC']
+	
+		    elif ipv6started:
                        aopts['ip6addrauto'] = "%s%s" % ( ipv6pfx, mac2eui(aopts['MAC']))
 
                if line[ini+2].count('.') > 0:
@@ -498,9 +507,21 @@ def master_parse(w, zf ):
 		    if line[ini+2] in interfaces:
 			aopts['ip4addr'] = get_ipv4_address(line[ini+2])			
 		    else:
-	            	aopts['ip4addr'] = network + line[ini+2]
+			ad = line[ini+2]
+			if not ad.isdigit():
+			    print 'numeric address expected: ', ad
+	            	    aopts['ip4addr'] = network + '000'
+
+			elif int(ad) >= 255 or int(ad) < 0 :
+			    print 'numeric address out of range: ', ad
+	            	    aopts['ip4addr'] = network + '000'
+			else:
+	            	    aopts['ip4addr'] = network + ad
+
+			if aopts['ip4addr'].split('.') != 4:
+				print 'bad address length: ', aopts['ip4addr']
 		        if ipv6started:
-	                   aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(line[ini+2]))
+	                   aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(ad))
 
 	       aopts['hostname'] = lhs
 	       hosts.append(copy.deepcopy(aopts))
