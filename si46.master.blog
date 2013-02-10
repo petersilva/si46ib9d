@@ -1,0 +1,17 @@
+;DNS-Domain=example.com 
+;SOA fwgw hostmaster 
+
+ IN NS fwgw.example.com.
+
+;DNS-Network=192.168.10/24
+;DNS-Network=radvd;
+;DNS-Forwarders=123.142.225.1,123.142.227.2
+
+fwgw    	IN	A	eth1 ; public
+fwgw            IN   AAAA       6rdif 
+fwgw   IN A 1 ; MAC=c3:e1:45:56:22:a1
+
+
+debvm IN A 3 ; MAC=52:54:00:f8:b5:22
+
+
