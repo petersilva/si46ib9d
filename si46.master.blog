@@ -7,7 +7,7 @@
 ;DNS-Network=radvd;
 ;DNS-Forwarders=123.142.225.1,123.142.227.2
 
-fwgw    	IN	A	eth1 ; public
+fwgw    	IN	A	eth1 ; public gw ns
 fwgw            IN   AAAA       6rdif 
 fwgw   IN A 1 ; MAC=c3:e1:45:56:22:a1
 

@@ -250,14 +250,18 @@ def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx ):
 	       a=''
 
          if a != '':
-	       #for a in [ 'ip6addrfixed', 'ip6addrauto' ]:
-	       #if a in i.keys():
 	       ip6addr = i[a]
                inmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], ip6addr) )
 	       if ( 'public' in i.keys() ): 
                   exmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], ip6addr) )
+	          if ( 'NS' in  i.keys() ):
+			exmap.write( "@ IN NS %s\n" % ( i['hostname'] ) )
 	       else: # we do not control reverse maps for public addresses, so only write in internal case.
-    		   if netpfx != '':
+	          if ( 'NS' in  i.keys() ):
+			inmap.write( "@ IN NS %s\n" % ( i['hostname'] ))
+    		  if netpfx != '':
+	          	if ( 'NS' in  i.keys() ):
+				v6rev.write( "@ IN NS %s" % ( i['hostname'] ) )
                   	v6rev.write( "%s IN PTR %s.%s.\n" \
 				% ( i6h2daddr(ip6addr)[0:31], \
 				i['hostname'], domain['DNS-Domain'] ))
@@ -420,7 +424,6 @@ def master_parse(w, zf ):
 
         line=l.split()
 
-
         if l.count(';') > 0: # there is a comment.
 	   aopts=parse_comment(l.split(';')[1])
         else:
@@ -450,9 +453,6 @@ def master_parse(w, zf ):
         elif 'DNS-Domain' in aopts :
                 domains[aopts['DNS-Domain']] = copy.deepcopy(aopts)
 		zd=aopts['DNS-Domain']
-	elif len(line) < 2 or line[0] == ';' :
-        	l=f.readline()
-		continue
 
         if len(l) >= 6:
            if line[0][0:6] == ';DHCP-' :
@@ -462,6 +462,9 @@ def master_parse(w, zf ):
                     dhcp_postamble += l[6:] 
 		else:
                     dhcp_preamble += l[6:] 
+	elif len(line) < 2 or line[0] == ';' :
+        	l=f.readline()
+		continue
 		
 
         if len(line) >= 3:

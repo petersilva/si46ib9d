@@ -64,10 +64,9 @@ diaspora-vpn IN A 2 ;
 ;DHCP-   range 192.168.10.130  192.168.10.135 ;
 ;DHCP-   option broadcast-address 192.168.10.255 ;
 ;DHCP-   option domain-name-servers 192.168.10.1, 192.168.10.6 ;
-;DHCP-   option routers 192.168.10.9 ;
 ;DHCP-}
 
-trestler IN A 1 ; MAC=00:01:c0:02:f6:da
+trestler IN A 1 ; MAC=00:01:c0:02:f6:da GW NS
 trestler IN AAAA 6rdif ; public
 idefix IN A 2 ; MAC=58:94:6b:bb:cd:8c
 debvm IN A 3 ; MAC=52:54:00:f8:b5:26

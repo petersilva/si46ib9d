@@ -1,9 +1,9 @@
 ;DNS-Domain=example.com 
 ;SOA fwgw hostmaster 
 
- IN NS fwgw.example.com.
+;lll IN NS fwgw.example.com.
 
-fwgw    	IN	A	123.142.254.10 ; public
+fwgw    	IN	A	123.142.254.10 ; public ns gw
 
 ;DNS-Network=192.168.10/24
 ;DNS-Forwarders=123.142.225.1,123.142.227.2

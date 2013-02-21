@@ -213,6 +213,11 @@ BUGS:
 
 
 TODO - Improvements I would like to do
+   Adding NS directive.
+	have it build name server prolog from the tagged entries.
+   Add the tail -f syslog to identify what to add to config.
+   Adding auto-dhcp.
+	;DNS-Network 192.168.1.0 gateway=1 dhcp (dungeon|guests)=4
 
 Run on other machines.
    This script works a lot better/more automagically if it is run
