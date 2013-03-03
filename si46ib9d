@@ -313,6 +313,8 @@ def namedconflocal(w, networks, ipv6pfx, domain ):
    if ipv6pfx != '':
    	nl.write( "\t%s:/64;\n" % ipv6pfx )
 
+   nl.write( "\t127/8;\n" );
+
    nl.write( "};\n\n" )
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
    nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
@@ -521,7 +523,7 @@ def master_parse(w, zf ):
 			else:
 	            	    aopts['ip4addr'] = network + ad
 
-			if aopts['ip4addr'].split('.') != 4:
+			if len( aopts['ip4addr'].split('.')) != 4:
 				print 'bad address length: ', aopts['ip4addr']
 		        if ipv6started:
 	                   aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(ad))
