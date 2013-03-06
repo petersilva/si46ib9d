@@ -213,6 +213,7 @@ BUGS:
 
 
 TODO - Improvements I would like to do
+   Add named-checkzone
    Adding NS directive.
 	have it build name server prolog from the tagged entries.
    Add the tail -f syslog to identify what to add to config.
