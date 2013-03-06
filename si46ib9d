@@ -33,10 +33,14 @@ import fnmatch
 
 import operator
 
+# for string.letters
+import string
+
 # these three are for get_ipv4_address
 import socket
 import fcntl
 import struct
+
 
 def get_ipv4_address(ifname):
     """ return the ipv4 address corresponding to the given interface.
@@ -509,8 +513,11 @@ def master_parse(w, zf ):
                if line[ini+2].count('.') > 0:
 		    aopts['ip4addr'] = line[ini+2]
                else:
-		    if line[ini+2] in interfaces:
-			aopts['ip4addr'] = get_ipv4_address(line[ini+2])			
+		    if line[ini+2][0] in string.letters:
+		    	if line[ini+2] in interfaces:
+				aopts['ip4addr'] = get_ipv4_address(line[ini+2])			
+			else:
+				print 'interface %s not up, has no address' % line[ini+2]
 		    else:
 			ad = line[ini+2]
 			if not ad.isdigit():
