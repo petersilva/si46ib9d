@@ -124,7 +124,7 @@ def empty_internal_reverse_zones(w, networks):
 	  		found=True
 	     
 	    if not found:
-	       enf.write( "zone \"%s.%s.in-addr.arpa\" { type master; file \"/etc/bind/db.empty\"; }; \n" \
+	       enf.write( "zone \"%s.%s.in-addr.arpa\" { \n\ttype master;\n\tfile \"/etc/bind/db.empty\"; \n}; \n" \
 			% ( na[1], na[0] ) );
         elif len(na) == 1:
 	    found=False
@@ -134,7 +134,7 @@ def empty_internal_reverse_zones(w, networks):
 	  		found=True
 	    
 	    if not found:
-	       enf.write( "zone \"%s.in-addr.arpa\" { type master; file \"/etc/bind/db.empty\"; }; \n" % (na[0] ) );
+	       enf.write( "zone \"%s.in-addr.arpa\" { \n\ttype master;\n\tfile \"/etc/bind/db.empty\";\n}; \n" % (na[0] ) );
 	else:
 	    print "Error, unexpected network!"
 	    continue
@@ -323,20 +323,20 @@ def namedconflocal(w, networks, ipv6pfx, domain ):
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
    nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
    nl.write( "\tinclude \"%s/dbr.empty-zones\";\n\n" % w )
-   nl.write( "\tzone \"%s\" { type master; file \"%s/dbf.internal.%s\"; allow-update { none; }; }; \n" % \
+   nl.write( "\tzone \"%s\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n\t\tallow-update { none; }; \n\t }; \n" % \
 		( domain, w, domain ) ) 
    for n in networks:
 	nas = n.split('.')
-       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa\" { type master; file \"%s/dbr.%s.%s.%s\"; allow-update { none; }; };\n\n" \
+       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
 			% ( nas[2].split('/')[0], nas[1], nas[0], w, nas[0], nas[1], nas[2].split('/')[0] ))
 
    if ipv6pfx != '':
-      nl.write( "\tzone \"%s.ip6.arpa\" { type master; file \"%s/dbr.%s\"; allow-update { none; }; };\n\n" \
+      nl.write( "\tzone \"%s.ip6.arpa\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
 	% ( ipv6hex2dotpfx(ipv6pfx), w, ipv6pfx ) )
    nl.write( "};\n\n" )
 
-   nl.write( "view \"public\" { match-clients { any; }; recursion no;\n\n " ) 
-   nl.write( "\tzone \"%s\" { type master; file \"%s/dbf.public.%s\"; allow-update { none; }; }; \n" % \
+   nl.write( "view \"public\" { \n\t\tmatch-clients { any; };\n\t\trecursion no;\n\n " ) 
+   nl.write( "\tzone \"%s\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.public.%s\";\n\t\tallow-update { none; }; \n\t}; \n" % \
 		( domain, w, domain ) ) 
    nl.write( "};\n\n" )
    nl.close()
