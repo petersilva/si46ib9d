@@ -1,0 +1,36 @@
+#!/bin/sh
+
+EXTIF="ppp0"
+EXTIP="`ifconfig $EXTIF | awk /$EXTIF/'{next}//{split($0,a,":");split(a[2],a," ");print a[1];exit}'`"
+
+INTIF="eth0"
+INTIP="172.25.5.1/24"
+INTNET="172.25.5.0/24"
+UNIVERSE="0.0.0.0/0"
+
+cat <<EOT
+Firewalls are fun!
+external interface is $EXTIF, ip=$EXTIP
+internal interface is $INTIF, ip=$INTIP 
+EOT
+
+echo "Flush and clean... filter tables"
+iptables -P INPUT ACCEPT  
+iptables -F INPUT 
+iptables -P OUTPUT ACCEPT  
+iptables -F OUTPUT 
+iptables -P FORWARD ACCEPT  
+iptables -F FORWARD 
+iptables -F -t nat
+
+if [ -n "`iptables -L | grep log-drop`" ]; then
+   iptables -F log-drop
+fi
+iptables -F
+
+# Delete all User-specified chains
+iptables -X
+iptables -t nat -X
+#
+# Reset all IPTABLES counters
+iptables -Z
