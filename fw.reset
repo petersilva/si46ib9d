@@ -1,11 +1,12 @@
 #!/bin/sh
 
-EXTIF="ppp0"
+EXTIF="eth1"
 EXTIP="`ifconfig $EXTIF | awk /$EXTIF/'{next}//{split($0,a,":");split(a[2],a," ");print a[1];exit}'`"
 
 INTIF="eth0"
-INTIP="172.25.5.1/24"
-INTNET="172.25.5.0/24"
+#INTIP="192.168.10.1/24"
+INTIP="`ifconfig $INTIF | awk /$INTIF/'{next}//{split($0,a,":");split(a[2],a," ");print a[1];exit}'`"
+INTNET="192.168.10.0/24"
 UNIVERSE="0.0.0.0/0"
 
 cat <<EOT
@@ -13,6 +14,9 @@ Firewalls are fun!
 external interface is $EXTIF, ip=$EXTIP
 internal interface is $INTIF, ip=$INTIP 
 EOT
+
+echo "nope!"
+exit
 
 echo "Flush and clean... filter tables"
 iptables -P INPUT ACCEPT  
