@@ -262,10 +262,10 @@ def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx ):
 			exmap.write( "@ IN NS %s\n" % ( i['hostname'] ) )
 	       else: # we do not control reverse maps for public addresses, so only write in internal case.
 	          if ( 'NS' in  i.keys() ):
-			inmap.write( "@ IN NS %s\n" % ( i['hostname'] ))
+			inmap.write( "@ IN NS %s.%s.\n" % ( i['hostname'], domain['DNS-Domain'] ))
     		  if netpfx != '':
 	          	if ( 'NS' in  i.keys() ):
-				v6rev.write( "@ IN NS %s" % ( i['hostname'] ) )
+				v6rev.write( "@ IN NS %s.%s.\n" % ( i['hostname'], domain['DNS-Domain'] ) )
                   	v6rev.write( "%s IN PTR %s.%s.\n" \
 				% ( i6h2daddr(ip6addr)[0:31], \
 				i['hostname'], domain['DNS-Domain'] ))
@@ -323,20 +323,20 @@ def namedconflocal(w, networks, ipv6pfx, domain ):
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
    nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
    nl.write( "\tinclude \"%s/dbr.empty-zones\";\n\n" % w )
-   nl.write( "\tzone \"%s\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n\t\tallow-update { none; }; \n\t }; \n" % \
+   nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n\t\tallow-update { none; }; \n\t }; \n" % \
 		( domain, w, domain ) ) 
    for n in networks:
 	nas = n.split('.')
-       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
+       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
 			% ( nas[2].split('/')[0], nas[1], nas[0], w, nas[0], nas[1], nas[2].split('/')[0] ))
 
    if ipv6pfx != '':
-      nl.write( "\tzone \"%s.ip6.arpa\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
+      nl.write( "\tzone \"%s.ip6.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
 	% ( ipv6hex2dotpfx(ipv6pfx), w, ipv6pfx ) )
    nl.write( "};\n\n" )
 
-   nl.write( "view \"public\" { \n\t\tmatch-clients { any; };\n\t\trecursion no;\n\n " ) 
-   nl.write( "\tzone \"%s\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.public.%s\";\n\t\tallow-update { none; }; \n\t}; \n" % \
+   nl.write( "view \"public\" { \n\tmatch-clients { any; };\n\trecursion no;\n\n " ) 
+   nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.public.%s\";\n\t\tallow-update { none; }; \n\t}; \n" % \
 		( domain, w, domain ) ) 
    nl.write( "};\n\n" )
    nl.close()
@@ -355,6 +355,8 @@ options {
         auth-nxdomain no;    # conform to RFC1035 -- FIXME really a good idea?
         listen-on-v6 { any; };
         version "pointy eared, sharp clawed";
+	dnssec-enable yes;
+	dnssec-validation auto;
 };
    """
    print "Forwarding dns servers are: ", forwarders
@@ -476,8 +478,8 @@ def master_parse(w, zf ):
         if len(line) >= 3:
            if line[0] == ';SOA':
                line[0] = '@ in SOA '
-               line[1] += '.' + zd
-               line[2] += '.' + zd
+               line[1] += '.' + zd + '.'
+               line[2] += '.' + zd + '.'
 	       if len(line) <= 5:
 	       		line += [ '(', "%s" % serial, '3h', '3w', '15m', '3h', ')' ]
 	       else:
