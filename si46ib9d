@@ -545,12 +545,18 @@ def master_parse(w, zf ):
 		    aopts['MAC']='' 
 	       else:
                     aopts['ip6addrauto'] = "%s%s" % ( ipv6pfx, mac2eui(aopts['MAC']))
-
+	       ipv6ifacefound=False
 	       for i in ipv6interfaces:
                     if (i['scope'] == 'Global') and (i['interface'] == line[ini+2]):
+			    ipv6ifacefound=True
 			    aopts['hostname']  = lhs
 			    aopts['ip6addrfixed'] = i['address']
 	       		    hosts.append(copy.deepcopy(aopts))
+	       if not ipv6ifacefound :
+	            aopts['hostname']  = lhs
+		    aopts['ip6addrfixed'] = line[ini+2]
+		    hosts.append(copy.deepcopy(aopts))
+		
 		
            elif line[ini+1] == 'MX' or line[ini+1] == 'NS' or line[ini+1] == 'TXT' or \
                 line[ini+1] == 'CNAME' :
