@@ -396,6 +396,23 @@ def dhcp_map( w, hosts, preamble, postamble ):
     map.write( postamble  )
     map.close()
 
+
+def dhcp6_map( w, hosts, preamble, postamble ):
+    """
+       dhcp_map, given a preamble, and a list of host information, prints out a dhcpd configuration file.
+    """
+    map=open(w + "/" + "dhcpd6.conf","w")
+    map.write( preamble  )
+    for i in hosts :
+      if 'MAC' in i.keys():
+        if i['MAC'] != '':
+           map.write( \
+             "host %s { hardware ethernet %s; " % (i['hostname'], i['MAC']) + \
+             " fixed-address6 %s; " % i['ip6addrfixed']  +  
+             " }\n"  )
+    map.write( postamble  )
+    map.close()
+
 def master_clean(w):
     """ remove the files with names based on the data.  If the data changes, these files will be left hanging around.
 	for example, the ipv6 reverse map will change name every time ISP DHCP gives us a different address.
@@ -420,6 +437,9 @@ def master_parse(w, zf ):
     
     f=open(zf,'r')
     l=f.readline()
+    dhcp6_hosts_started=False
+    dhcp6_preamble=""
+    dhcp6_postamble=""
     dhcp_hosts_started=False
     dhcp_preamble=""
     dhcp_postamble=""
@@ -470,6 +490,13 @@ def master_parse(w, zf ):
                     dhcp_postamble += l[6:] 
 		else:
                     dhcp_preamble += l[6:] 
+           if line[0][0:7] == ';DHCP6-' :
+		if line[0][7:] == "hosts":
+			dhcp6_hosts_started=True
+		elif dhcp6_hosts_started:
+                    dhcp6_postamble += l[7:] 
+		else:
+                    dhcp6_preamble += l[7:] 
 	elif len(line) < 2 or line[0] == ';' :
         	l=f.readline()
 		continue
@@ -573,6 +600,7 @@ def master_parse(w, zf ):
     hosts.sort(key=operator.itemgetter('hostname'))
 
     dhcp_map( w, hosts, dhcp_preamble, dhcp_postamble )
+    dhcp6_map( w, hosts, dhcp6_preamble, dhcp6_postamble )
 
     for d in domains:
        fwd_map(w, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx )
