@@ -66,6 +66,25 @@ diaspora-vpn IN A 2 ;
 ;DHCP-   option domain-name-servers 192.168.10.1, 192.168.10.6 ;
 ;DHCP-}
 
+;DHCP6-default-lease-time 2592000;
+;DHCP6-preferred-lifetime 604800;
+;DHCP6-option dhcp-renewal-time 3600;
+;DHCP6-option dhcp-rebinding-time 7200;
+;DHCP6-allow leasequery;
+;DHCP6-option dhcp6.name-servers 2001:4860:4860::8888, 2001:4860:4860::8844 ;
+;DHCP6-
+;DHCP6-option dhcp6.info-refresh-time 21600;
+;DHCP6-
+;DHCP6-option domain-name "example.com" ;
+;DHCP6-authoritative ;
+;DHCP6-
+;DHCP6-hosts ;
+;DHCP6-subnet6 2207:fa43:6d5a:4d50::/64 {
+;DHCP6-
+;DHCP6-   # guests from 128 to ff about 128 temp addresses...
+;DHCP6-   range6  2207:fa43:6d5a:4d50::80 2207:fa43:6d5a:4d50::ff ;
+;DHCP6-}
+
 trestler IN A 1 ; MAC=00:01:c0:02:f6:da GW NS
 trestler IN AAAA 6rdif ; public
 idefix IN A 2 ; MAC=58:94:6b:bb:cd:8c
