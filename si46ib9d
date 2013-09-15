@@ -209,7 +209,7 @@ def parse_comment( c ):
 
     return it
 
-def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx ):
+def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
     """
        fwd_map, write out a zone file.
 	also writes the reverse ipv6 file... how did that happen?
@@ -255,7 +255,11 @@ def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx ):
 
          if a != '':
 	       ip6addr = i[a]
-               inmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], ip6addr) )
+	       if dhcp6_active:
+               		inmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], i['ip6addrfixed']) )
+	       else:
+               		inmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], i[a]) )
+
 	       if ( 'public' in i.keys() ): 
                   exmap.write( "%s IN AAAA %s\n"  % ( i['hostname'], ip6addr) )
 	          if ( 'NS' in  i.keys() ):
@@ -266,9 +270,17 @@ def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx ):
     		  if netpfx != '':
 	          	if ( 'NS' in  i.keys() ):
 				v6rev.write( "@ IN NS %s.%s.\n" % ( i['hostname'], domain['DNS-Domain'] ) )
-                  	v6rev.write( "%s IN PTR %s.%s.\n" \
-				% ( i6h2daddr(ip6addr)[0:31], \
-				i['hostname'], domain['DNS-Domain'] ))
+
+			# write both RAD and DHCP addresses to reverse map, just in case?
+			# if you put a wrong address in fwd map, causes problems, in reverse OK?
+	 		if ( 'ip6addrauto' in i.keys() ) :
+                  		v6rev.write( "%s.%s.ip6.arpa. IN PTR %s.%s.\n" \
+					% ( i6h2daddr(i['ip6addrauto'])[0:31], v6origin, \
+					i['hostname'], domain['DNS-Domain'] ))
+	 		if ( 'ip6addrfixed' in i.keys() ) :
+                  		v6rev.write( "%s.%s.ip6.arpa. IN PTR %s.%s.\n" \
+					% ( i6h2daddr(i['ip6addrfixed'])[0:31], v6origin, \
+					i['hostname'], domain['DNS-Domain'] ))
 
     inmap.close()  
     exmap.close()  
@@ -323,8 +335,9 @@ def namedconflocal(w, networks, ipv6pfx, domain ):
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
    nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
    nl.write( "\tinclude \"%s/dbr.empty-zones\";\n\n" % w )
-   nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n\t\tallow-update { none; }; \n\t }; \n" % \
-		( domain, w, domain ) ) 
+   nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n" % ( domain, w, domain ) ) 
+   nl.write( "\t\tallow-update { none; }; \n\t }; \n" )
+
    for n in networks:
 	nas = n.split('.')
        	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
@@ -392,7 +405,6 @@ def dhcp_map( w, hosts, preamble, postamble ):
              "host %s { hardware ethernet %s; " % (i['hostname'], i['MAC']) + \
              " fixed-address %s; " %  i['ip4addr'] +   \
              " }\n"  )
-             #+ " fixed-address6 %s; " % i['ip6addrfixed']  +  
     map.write( postamble  )
     map.close()
 
@@ -401,7 +413,7 @@ def dhcp6_map( w, hosts, preamble, postamble ):
     """
        dhcp_map, given a preamble, and a list of host information, prints out a dhcpd configuration file.
     """
-    map=open(w + "/" + "dhcpd6.conf","w")
+    map=open(w + "/" + "dhcpdv6.conf","w")
     map.write( preamble  )
     for i in hosts :
       if 'MAC' in i.keys():
@@ -530,6 +542,7 @@ def master_parse(w, zf ):
 		ini=1
 		
 	   if line[ini+1] == 'A' : # normal host entry
+	       ad = line[ini+2]
                if not 'MAC' in aopts:
 		    aopts['MAC']='' 
 	       else:
@@ -537,18 +550,18 @@ def master_parse(w, zf ):
 			print 'bad MAC length:', aopts['MAC']
 	
 		    elif ipv6started:
-                       aopts['ip6addrauto'] = "%s%s" % ( ipv6pfx, mac2eui(aopts['MAC']))
+	               	aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(ad))
+                       	aopts['ip6addrauto'] = "%s%s" % ( ipv6pfx, mac2eui(aopts['MAC']))
 
-               if line[ini+2].count('.') > 0:
-		    aopts['ip4addr'] = line[ini+2]
+               if ad.count('.') > 0:
+		    aopts['ip4addr'] = ad
                else:
-		    if line[ini+2][0] in string.letters:
-		    	if line[ini+2] in interfaces:
-				aopts['ip4addr'] = get_ipv4_address(line[ini+2])			
+		    if ad[0] in string.letters:
+		    	if ad in interfaces:
+				aopts['ip4addr'] = get_ipv4_address(ad)			
 			else:
-				print 'interface %s not up, has no address' % line[ini+2]
+				print 'interface %s not up, has no address' % ad
 		    else:
-			ad = line[ini+2]
 			if not ad.isdigit():
 			    print 'numeric address expected: ', ad
 	            	    aopts['ip4addr'] = network + '000'
@@ -561,6 +574,7 @@ def master_parse(w, zf ):
 
 			if len( aopts['ip4addr'].split('.')) != 4:
 				print 'bad address length: ', aopts['ip4addr']
+
 		        if ipv6started:
 	                   aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(ad))
 
@@ -600,10 +614,12 @@ def master_parse(w, zf ):
     hosts.sort(key=operator.itemgetter('hostname'))
 
     dhcp_map( w, hosts, dhcp_preamble, dhcp_postamble )
-    dhcp6_map( w, hosts, dhcp6_preamble, dhcp6_postamble )
+
+    if (dhcp6_hosts_started):
+    	dhcp6_map( w, hosts, dhcp6_preamble, dhcp6_postamble )
 
     for d in domains:
-       fwd_map(w, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx )
+       fwd_map(w, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx, dhcp6_hosts_started )
 
     for r in networks:
        reverse_map( w, r, preamble, otherFwdRecords, hosts, zd )
