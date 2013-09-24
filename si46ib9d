@@ -441,6 +441,17 @@ def dhcp6_map( w, hosts, preamble, postamble ):
     map.write( postamble  )
     map.close()
 
+def ndwatch_map( w, hosts, preamble, ):
+
+    map=open(w + "/" + "ndwatch.conf","w")
+    map.write( preamble  )
+    for h in hosts :
+	if h['MAC'] != '':
+	    map.write( "host %s %s\n" % ( h['hostname'], h['MAC'] ) )
+
+    map.close()
+
+
 def master_clean(w):
     """ remove the files with names based on the data.  If the data changes, these files will be left hanging around.
 	for example, the ipv6 reverse map will change name every time ISP DHCP gives us a different address.
@@ -469,6 +480,8 @@ def master_parse(w, zf ):
     dhcp6_preamble=""
     dhcp6_postamble=""
     dhcp_hosts_started=False
+    ndw_started=False
+    ndw_preamble=""
     dhcp_preamble=""
     dhcp_postamble=""
     otherFwdRecords=""
@@ -534,6 +547,10 @@ def master_parse(w, zf ):
                     dhcp6_postamble += l[7:] 
 		else:
                     dhcp6_preamble += l[7:] 
+           if line[0][0:5] == ';NDW-' :
+		    ndw_started=True
+		    ndw_preamble += l[5:]
+	
 	elif len(line) < 2 or line[0] == ';' :
         	l=f.readline()
 		continue
@@ -642,6 +659,9 @@ def master_parse(w, zf ):
 
     if (dhcp6_hosts_started):
     	dhcp6_map( w, hosts, dhcp6_preamble, dhcp6_postamble )
+
+    if (ndw_started):
+	ndwatch_map( w, hosts, ndw_preamble )
 
     for d in domains:
        fwd_map(w, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx, dhcp6_hosts_started )
