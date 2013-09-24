@@ -37,6 +37,9 @@ trestler	IN 	A	eth1 ; public
 ; name verification for Google Apps for your domain.
 googlebcbgobblydgook.example.com IN CNAME google.com. ; public
 
+; if you want dns updates to be enabled using the given key:
+;
+;DNS-Updater /etc/bind/ddns.key DDNS_UPDATE
 ;
 ; Hosts in example.com
 ;

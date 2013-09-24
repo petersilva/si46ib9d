@@ -316,12 +316,16 @@ def reverse_map(w, r, preamble, otherrecords, hosts, domain):
     map.close()
     return
 
-def namedconflocal(w, networks, ipv6pfx, domain ):
+def namedconflocal(w, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
    print "networks: ", networks
    print "ipv6pfx: ", ipv6pfx
    print "domain: ", domain
    
    nl = open( w + "/named.conf.local", "w" )
+
+   if updater_keyfile != '':
+	nl.write( "include \"%s\";\n\n" % updater_keyfile )
+
    nl.write( "acl internal {\n" );
    for n in networks:
 	nl.write( "\t%s;\n" % n );
@@ -336,16 +340,28 @@ def namedconflocal(w, networks, ipv6pfx, domain ):
    nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
    nl.write( "\tinclude \"%s/dbr.empty-zones\";\n\n" % w )
    nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n" % ( domain, w, domain ) ) 
-   nl.write( "\t\tallow-update { none; }; \n\t }; \n" )
+   if updater_key == '' :
+   	nl.write( "\t\tallow-update { none; }; \n\t }; \n" )
+   else:
+   	nl.write( "\t\tallow-update { key %s; }; \n\t }; \n" % updater_key )
 
    for n in networks:
 	nas = n.split('.')
-       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
+       	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n" \
 			% ( nas[2].split('/')[0], nas[1], nas[0], w, nas[0], nas[1], nas[2].split('/')[0] ))
+	if updater_key == '' :
+		nl.write( "\t\tallow-update { none; };\n\t};\n\n" )
+	else:
+		nl.write( "\t\tallow-update { key %s; };\n\t};\n\n" % updater_key )
 
    if ipv6pfx != '':
-      nl.write( "\tzone \"%s.ip6.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s\";\n\t\tallow-update { none; };\n\t};\n\n" \
+        nl.write( "\tzone \"%s.ip6.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s\";\n" \
 	% ( ipv6hex2dotpfx(ipv6pfx), w, ipv6pfx ) )
+	if updater_key == '' :
+		nl.write( "\t\tallow-update { none; };\n\t};\n\n" )
+	else:
+		nl.write( "\t\tallow-update { key %s; };\n\t};\n\n" % updater_key )
+
    nl.write( "};\n\n" )
 
    nl.write( "view \"public\" { \n\tmatch-clients { any; };\n\trecursion no;\n\n " ) 
@@ -457,6 +473,11 @@ def master_parse(w, zf ):
     dhcp_postamble=""
     otherFwdRecords=""
     preamble=""
+
+    #dynamic update permission setup.
+    updater_keyfile=""
+    updater_key=""
+
     # would have preferred a human legible date, but out of range (only 32 bit?)
     #serial=time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))
     serial="%d" % int(time.time())
@@ -493,6 +514,10 @@ def master_parse(w, zf ):
         elif 'DNS-Domain' in aopts :
                 domains[aopts['DNS-Domain']] = copy.deepcopy(aopts)
 		zd=aopts['DNS-Domain']
+
+        elif 'DNS-Updater' in aopts :
+		updater_keyfile=line[1]
+		updater_key=line[2]
 
         if len(l) >= 6:
            if line[0][0:6] == ';DHCP-' :
@@ -624,7 +649,7 @@ def master_parse(w, zf ):
     for r in networks:
        reverse_map( w, r, preamble, otherFwdRecords, hosts, zd )
        
-    namedconflocal( w, networks, ipv6pfx, zd )
+    namedconflocal( w, networks, ipv6pfx, zd, updater_keyfile, updater_key )
     namedconfoptions( w, forwarders )
     namedconf( w )	
     empty_internal_reverse_zones(w, networks)
