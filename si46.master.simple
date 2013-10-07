@@ -1,11 +1,13 @@
 ;DNS-Domain=example.com 
 ;SOA fwgw hostmaster 
 
-;lll IN NS fwgw.example.com.
+@ IN NS fwgw.example.com.
 
 fwgw    	IN	A	123.142.254.10 ; public ns gw
 
 ;DNS-Network=192.168.10/24
-;DNS-Forwarders=123.142.225.1,123.142.227.2
+
+; Use Google's public resolvers...
+;DNS-Forwarders=8.8.8.8,8.8.4.4
 
 debvm IN A 3 ; MAC=52:54:00:f8:b5:26
