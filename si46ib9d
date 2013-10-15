@@ -209,7 +209,7 @@ def parse_comment( c ):
 
     return it
 
-def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
+def fwd_map(x, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
     """
        fwd_map, write out a zone file.
 	also writes the reverse ipv6 file... how did that happen?
@@ -222,8 +222,8 @@ def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
     	v6origin=ipv6hex2dotpfx(netpfx)
  	v6rev.write( "$ORIGIN %s.ip6.arpa.\n" % v6origin ) 
 
-    exmap=open( w + "/" + "dbf.public." + domain['DNS-Domain'], 'w')
-    inmap=open( w + "/" + "dbf.internal." + domain['DNS-Domain'], 'w')
+    exmap=open( x + "/" + "dbf.public." + domain['DNS-Domain'], 'w')
+    inmap=open( x + "/" + "dbf.internal." + domain['DNS-Domain'], 'w')
     exmap.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
     inmap.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
 
@@ -291,7 +291,7 @@ def fwd_map(w, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
     return
 
 
-def reverse_map(w, r, preamble, otherrecords, hosts, domain):
+def reverse_map(x, r, preamble, otherrecords, hosts, domain):
     """
        reverse_map, write out a reverse zone file.
            pick the hosts from the list which are in the zone, creating a record for each one.
@@ -302,7 +302,7 @@ def reverse_map(w, r, preamble, otherrecords, hosts, domain):
     dotted.reverse()
     iarpa= '.'.join(dotted) + '.in-addr.arpa.'
     dotted.reverse()
-    map=open( w + "/" + "dbr." + bits[0], 'w')
+    map=open( x + "/" + "dbr." + bits[0], 'w')
     map.write( "$ORIGIN %s\n" % iarpa )
     map.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
     map.write( preamble  )
@@ -376,7 +376,7 @@ def namedconf( w ):
    nc.write( "include \"%s/named.conf.options\";\n" % w );
    nc.close()
 
-def namedconfoptions( w, forwarders ):
+def namedconfoptions( w, x, forwarders ):
    """
 options {
         directory "/var/cache/bind";
@@ -390,7 +390,7 @@ options {
    """
    print "Forwarding dns servers are: ", forwarders
    no = open( w + "/named.conf.options", "w" )
-   no.write( "options { \n\tdirectory \"/var/cache/bind\";\n" )
+   no.write( "options { \n\tdirectory \"%s\";\n" % x )
    no.write( "\tforwarders { %s; };\n" % ';'.join(forwarders) )
    no.write( "\tauth-nxdomain no;\n" )
    no.write( "\tlisten-on-v6 { any; };\n" )
@@ -452,18 +452,19 @@ def ndwatch_map( w, hosts, preamble, ):
     map.close()
 
 
-def master_clean(w):
+def master_clean(x):
     """ remove the files with names based on the data.  If the data changes, these files will be left hanging around.
 	for example, the ipv6 reverse map will change name every time ISP DHCP gives us a different address.
     """
     print "master clean"
-    for i in os.listdir(w):
-	if fnmatch.fnmatch(i,"db[fr].*"):
-		print 'Removing: ', i
-		os.unlink(w + "/" + i)
+    for i in os.listdir(x):
+        if fnmatch.fnmatch(i,"db[fr].*"):
+           print 'Removing: ', i
+	   os.unlink(x + "/" + i)
+
      
 
-def master_parse(w, zf ):
+def master_parse(w, x, zf ):
     zd=''
     hosts=[]
     networks = []
@@ -474,8 +475,6 @@ def master_parse(w, zf ):
     ipv6started=False
     ipv6pfx=''
     
-    f=open(zf,'r')
-    l=f.readline()
     dhcp6_hosts_started=False
     dhcp6_preamble=""
     dhcp6_postamble=""
@@ -494,6 +493,18 @@ def master_parse(w, zf ):
     # would have preferred a human legible date, but out of range (only 32 bit?)
     #serial=time.strftime("%Y%m%d%H%M%S", time.localtime(time.time()))
     serial="%d" % int(time.time())
+
+    probefname=zf + ".probe"
+
+    try:
+        f=open(probefname,'r')
+	fname=probefname
+    except IOError:
+        f=open(zf)
+	fname=zf
+ 
+    l=f.readline()
+
     while( l != "" ):
 
         line=l.split()
@@ -651,6 +662,11 @@ def master_parse(w, zf ):
 
 
         l=f.readline()
+	if l == '':
+	   if fname != zf:
+              f=open(zf)
+	      fname=zf
+              l=f.readline()
  
     f.close()
     hosts.sort(key=operator.itemgetter('hostname'))
@@ -664,36 +680,132 @@ def master_parse(w, zf ):
 	ndwatch_map( w, hosts, ndw_preamble )
 
     for d in domains:
-       fwd_map(w, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx, dhcp6_hosts_started )
+       fwd_map(x, preamble, otherFwdRecords, hosts, domains[d], ipv6pfx, dhcp6_hosts_started )
 
     for r in networks:
-       reverse_map( w, r, preamble, otherFwdRecords, hosts, zd )
+       reverse_map( x, r, preamble, otherFwdRecords, hosts, zd )
        
     namedconflocal( w, networks, ipv6pfx, zd, updater_keyfile, updater_key )
-    namedconfoptions( w, forwarders )
+    namedconfoptions( w, x, forwarders )
     namedconf( w )	
     empty_internal_reverse_zones(w, networks)
     return
 
+def rndname():
+    """
+	Generate a random identifier for DNS Update keys
+    """
+    import random
+    len = random.randrange(8,24)
+    
+    name=""
+    while len > 0:
+	name += random.choice('ABCDEFGHIJKLMNOPQRSTUVXYZabcefghijklmnopqrstyuwxyz')
+	len-=1
+
+    return name
+
+def makeDNSDynUpdateKeys():
+    """
+	Generate DNS update private public key authentication info.
+	return a tuple of ( id, public, private )
+    """ 
+    import subprocess
+
+    id=rndname()
+    cmd = "dnssec-keygen -r /dev/urandom -a HMAC-MD5 -b 512 -n HOST " + id 
+    print "+%s+" % cmd
+    proc = subprocess.Popen( ( cmd.split() ), stdout=subprocess.PIPE)
+    name = proc.stdout.read().strip()
+    print "dnssec-keygen returned: +%s+" % name
+
+    pubkf = open( name + ".key" )
+    pubkey = ' '.join( pubkf.read().split()[6:] )
+    pubkf.close()
+    print "pubkey: +%s+" % pubkey
+
+    privkf = open( name + ".private" )
+    privd={}
+    for l in privkf.readlines() :
+	f = l.split(': ')
+        privd[f[0]] = f[1]
+    privkf.close()
+
+    print "privkey: %s" % privd['Key']
+
+    return( id, pubkey, privd['Key'] )
+    
+
+def makeNamedKeyFile(keys):
+    """
+	make a ndwatch.key file for dynamic dns updates.
+	key is a tuple ( id, public key, private key)
+    """
+    import os
+
+    name= os.getcwd() + "/bind_update.key"
+    f = open( name, "w" )
+    f.write( "key %s. { \n" % keys[0] )
+    f.write( "   algorithm HMAC-MD5;\n" )
+    f.write( "   secret \"%s\";\n" % keys[2] )
+    f.write( "};\n" )
+    f.close()
+
+    return( name )
+
+
+def probe():
+    """
+       look for initial setup info.
+       set up dynamic update keys.
+    """
+    # setup dns dynamic update keys
+    # generate random username...
+    # invoke dns-keygen to create the two files...
+    # dnssec-keygen -r /dev/urandom -a HMAC-MD5 -b 512 -n rndom_name
+    # extract key from files to place in other files...
+    #
+    # guess domain...
+    # guess Network...
+    # guess ipv6 network?
+    
+
+    keys = makeDNSDynUpdateKeys()
+    kfname = makeNamedKeyFile(keys)
+    print "keys: ", keys
+
+    probe = open("si46.master.probe","w")
+    probe.write( ";NDW-dnskeyuser %s\n" % keys[0] )
+    probe.write( ";NDW-dnskey %s\n" % keys[1].split()[1] )
+    probe.write( ";DNS-Updater %s %s\n" % ( kfname, keys[0] ) )
+
+    return
 
 
 if __name__ == '__main__':
 
+    probe_only=False
     masterfile="/etc/bind/si46.master"
     write2dir="/etc/bind"
-    opts, args = getopt.getopt(sys.argv[1:],"r:vw:z:",[ "read-from-file", "version" , "write-to-dir", "zone" ])
+    writeconfdir="/var/cache/bind"
+    opts, args = getopt.getopt(sys.argv[1:],"c:d:pr:",[ "write-conf-dir", \
+         "write-data-dir",  "probe", "read-from-file"  ])
 
     for o, a in opts:
+	if o in ( "-c", "--write-conf-dir" ):
+	   writeconfdir=a
+	if o in ( "-d", "--write-data-dir" ):
+	   write2dir=a
+	if o in ( "-p", "--probe" ):
+	   probe_only=True
 	if o in ( "-r", "--read-from-file" ):
 	   masterfile=a
-	if o in ( "-w", "--write-to-dir" ):
-	   write2dir=a
-	if o in ( "-d", "--domain" ):
-           zonedomain=a
-        if o in ( "-z", "--zone" ):
-           masterfile=a
     
-    master_clean(write2dir)
-    master_parse(write2dir, masterfile )
+    if probe_only:
+	probe()
+	exit()
+
+    master_clean(writeconfdir)
+    master_parse(write2dir, writeconfdir, masterfile )
        
 
