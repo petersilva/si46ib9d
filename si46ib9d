@@ -29,6 +29,8 @@ import getopt
 import time
 import copy
 import os
+import stat
+import grp
 import fnmatch
 
 import operator
@@ -41,6 +43,9 @@ import socket
 import fcntl
 import struct
 
+# mod settings for zone files, so they can be dynamically updated
+# by the running bind process.
+modebits = 0664
 
 def get_ipv4_address(ifname):
     """ return the ipv4 address corresponding to the given interface.
@@ -107,13 +112,15 @@ def all_ipv6_interfaces():
     return ipv6_interfaces
 
 def empty_internal_reverse_zones(w, networks):
-    """ populate the dbr.empty-zones file.
+    """ populate the dbr.empty-zones file with non-routable zones that are not in local use.
+	if a zone is in use, locally then do not create an empty zone reference for it.
         Are there IPv6 equivalents also? Dunno!
     """
     empty_nets = ( '10', '192.168', '172.16', '172.17','172.18','172.19','172.20','172.21', \
        '172.22', '172.23', '172.24', '172.25', '172.26', '172.27', '172.28', '172.29', \
        '172.30', '172.31' )
-    enf = open( w  + "/dbr.empty-zones", "w" )
+    zname=  w  + "/dbr.empty-zones"
+    enf = open( zname, "w" )
     for en in empty_nets:
 	na = en.split('.')
 	if len(na) == 2:
@@ -140,7 +147,8 @@ def empty_internal_reverse_zones(w, networks):
 	    continue
 	
     enf.close()
-
+    os.chmod( zname, modebits )
+    os.chown( zname, 0, grp.getgrnam('bind')[2] )
 
 def mac2eui( mac ):
     """ mac2eui generates the ipv6 auto configuration address after 
@@ -218,12 +226,15 @@ def fwd_map(x, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
     print "fwd_map of %s" % domain
 
     if netpfx != '':
-   	v6rev=open( w + "/" + "dbr." + netpfx, 'w')
+   	v6revfname= w + "/" + "dbr." + netpfx
+   	v6rev=open( v6revfname, 'w')
     	v6origin=ipv6hex2dotpfx(netpfx)
  	v6rev.write( "$ORIGIN %s.ip6.arpa.\n" % v6origin ) 
 
-    exmap=open( x + "/" + "dbf.public." + domain['DNS-Domain'], 'w')
-    inmap=open( x + "/" + "dbf.internal." + domain['DNS-Domain'], 'w')
+    exmapfname =  x + "/" + "dbf.public." + domain['DNS-Domain']
+    exmap=open( exmapfname, 'w')
+    inmapfname = x + "/" + "dbf.internal." + domain['DNS-Domain']
+    inmap=open( inmapfname, 'w')
     exmap.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
     inmap.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
 
@@ -283,10 +294,17 @@ def fwd_map(x, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
 					i['hostname'], domain['DNS-Domain'] ))
 
     inmap.close()  
+    os.chmod( inmapfname, modebits )
+    os.chown( inmapfname, 0, grp.getgrnam('bind')[2] )
+
     exmap.close()  
+    os.chmod( exmapfname, modebits )
+    os.chown( exmapfname, 0, grp.getgrnam('bind')[2] )
 
     if netpfx != '':
     	v6rev.close()
+        os.chmod( v6revfname, modebits )
+        os.chown( v6revfname, 0, grp.getgrnam('bind')[2] )
 
     return
 
@@ -302,7 +320,8 @@ def reverse_map(x, r, preamble, otherrecords, hosts, domain):
     dotted.reverse()
     iarpa= '.'.join(dotted) + '.in-addr.arpa.'
     dotted.reverse()
-    map=open( x + "/" + "dbr." + bits[0], 'w')
+    rmapfname= x + "/" + "dbr." + bits[0]
+    map = open( rmapfname, 'w')
     map.write( "$ORIGIN %s\n" % iarpa )
     map.write( "$TTL %d\n" % 86400 )   # FIXME: setting a constant value...
     map.write( preamble  )
@@ -314,9 +333,11 @@ def reverse_map(x, r, preamble, otherrecords, hosts, domain):
 	      map.write("%s in PTR %s.%s.\n" % ( net[3], i['hostname'], domain ))
        
     map.close()
+    os.chmod( rmapfname, modebits )
+    os.chown( rmapfname, 0, grp.getgrnam('bind')[2] )
     return
 
-def namedconflocal(w, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
+def namedconflocal(w, x, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
    print "networks: ", networks
    print "ipv6pfx: ", ipv6pfx
    print "domain: ", domain
@@ -339,7 +360,7 @@ def namedconflocal(w, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
    nl.write( "\tinclude \"/etc/bind/named.conf.default-zones\";\n" )
    nl.write( "\tinclude \"%s/dbr.empty-zones\";\n\n" % w )
-   nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n" % ( domain, w, domain ) ) 
+   nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.internal.%s\";\n" % ( domain, x, domain ) ) 
    if updater_key == '' :
    	nl.write( "\t\tallow-update { none; }; \n\t }; \n" )
    else:
@@ -348,7 +369,7 @@ def namedconflocal(w, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
    for n in networks:
 	nas = n.split('.')
        	nl.write( "\tzone \"%s.%s.%s.in-addr.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s.%s.%s\";\n" \
-			% ( nas[2].split('/')[0], nas[1], nas[0], w, nas[0], nas[1], nas[2].split('/')[0] ))
+			% ( nas[2].split('/')[0], nas[1], nas[0], x, nas[0], nas[1], nas[2].split('/')[0] ))
 	if updater_key == '' :
 		nl.write( "\t\tallow-update { none; };\n\t};\n\n" )
 	else:
@@ -356,7 +377,7 @@ def namedconflocal(w, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
 
    if ipv6pfx != '':
         nl.write( "\tzone \"%s.ip6.arpa.\" { \n\t\ttype master;\n\t\tfile \"%s/dbr.%s\";\n" \
-	% ( ipv6hex2dotpfx(ipv6pfx), w, ipv6pfx ) )
+	% ( ipv6hex2dotpfx(ipv6pfx), x, ipv6pfx ) )
 	if updater_key == '' :
 		nl.write( "\t\tallow-update { none; };\n\t};\n\n" )
 	else:
@@ -366,7 +387,7 @@ def namedconflocal(w, networks, ipv6pfx, domain, updater_keyfile, updater_key ):
 
    nl.write( "view \"public\" { \n\tmatch-clients { any; };\n\trecursion no;\n\n " ) 
    nl.write( "\tzone \"%s.\" { \n\t\ttype master;\n\t\tfile \"%s/dbf.public.%s\";\n\t\tallow-update { none; }; \n\t}; \n" % \
-		( domain, w, domain ) ) 
+		( domain, x, domain ) ) 
    nl.write( "};\n\n" )
    nl.close()
 
@@ -685,7 +706,7 @@ def master_parse(w, x, zf ):
     for r in networks:
        reverse_map( x, r, preamble, otherFwdRecords, hosts, zd )
        
-    namedconflocal( w, networks, ipv6pfx, zd, updater_keyfile, updater_key )
+    namedconflocal( w, x, networks, ipv6pfx, zd, updater_keyfile, updater_key )
     namedconfoptions( w, x, forwarders )
     namedconf( w )	
     empty_internal_reverse_zones(w, networks)
@@ -736,14 +757,14 @@ def makeDNSDynUpdateKeys():
     return( id, pubkey, privd['Key'] )
     
 
-def makeNamedKeyFile(keys):
+def makeNamedKeyFile(x, keys):
     """
 	make a ndwatch.key file for dynamic dns updates.
 	key is a tuple ( id, public key, private key)
     """
     import os
 
-    name= os.getcwd() + "/bind_update.key"
+    name= x + "/bind_update.key"
     f = open( name, "w" )
     f.write( "key %s. { \n" % keys[0] )
     f.write( "   algorithm HMAC-MD5;\n" )
@@ -754,7 +775,7 @@ def makeNamedKeyFile(keys):
     return( name )
 
 
-def probe():
+def probe(x):
     """
        look for initial setup info.
        set up dynamic update keys.
@@ -802,7 +823,7 @@ if __name__ == '__main__':
 	   masterfile=a
     
     if probe_only:
-	probe()
+	probe(writeconfdir)
 	exit()
 
     master_clean(writeconfdir)
