@@ -744,11 +744,9 @@ def findNets():
     net4=''
     net6=''
     cmd = "ip addr"
-    print "+%s+" % cmd
     proc = subprocess.Popen( ( cmd.split() ), stdout=subprocess.PIPE)
     for l in proc.stdout.readlines() :
         ll = l.split()
-        print ll
 
 	if ll[0] == 'inet':
 	   net = ll[1].split('/')
@@ -759,7 +757,6 @@ def findNets():
 	   if netmask != 24:
 		print "ugh! only 24 bit netmask supported... sorry!"
 		exit
-	   print "netaddr: %s, mask: %d" % ( netaddr, netmask )
 	   net4=netaddr[0] + '.' + netaddr[1] + '.' + netaddr[2] + '/24'
 	elif ll[0] == 'inet6':
   
@@ -768,22 +765,40 @@ def findNets():
 	   netaddr = net[0].split(':')
 	   if ( netaddr[0] == 'fe80' or netaddr[0] == '' ) :
 		continue
-	   print "netaddr6: %s, mask: %d" % ( netaddr, netmask )
            net6= "%s::/64" % ( ':'.join(netaddr[0:4]) )
     return ( net4, net6 )
 
-def makeDNSDynUpdateKeys():
+def makeDNSDynUpdateKeys(w):
     """
-	Generate DNS update private public key authentication info.
+	return DNS update private public key authentication info.
 	return a tuple of ( id, public, private )
+	(create new key if none exists.)
     """ 
 
-    id=rndname()
-    cmd = "dnssec-keygen -r /dev/urandom -a HMAC-MD5 -b 512 -n HOST " + id 
-    print "+%s+" % cmd
-    proc = subprocess.Popen( ( cmd.split() ), stdout=subprocess.PIPE)
-    name = proc.stdout.read().strip()
-    print "dnssec-keygen returned: +%s+" % name
+    # set name according to existing keys.
+    found = False
+    for kf in os.listdir(w):
+        print "looking in w:", kf
+        if kf[0:5] == 'Ksi46':
+	   print "Found!"
+	   found=True
+	   if kf[-4:] == '.key':
+               name=kf[:-4]
+           else:
+               name=kf[:-8] # remove .private
+	   id=name[1:].split('.')[0]
+           break
+
+    if not found: # set name by creating new keys.
+       id= "si46" + rndname()
+       cmd="dnssec-keygen -r /dev/urandom -K %s -a HMAC-MD5 -b 512 -n HOST %s " \
+             % ( w, id )
+       print "+%s+" % cmd
+       proc = subprocess.Popen( ( cmd.split() ), stdout=subprocess.PIPE)
+       name = proc.stdout.read().strip()
+
+    print "DNS update Key selected: +%s+" % name
+    
 
     pubkf = open( name + ".key" )
     pubkey = ' '.join( pubkf.read().split()[6:] )
@@ -794,7 +809,7 @@ def makeDNSDynUpdateKeys():
     privd={}
     for l in privkf.readlines() :
 	f = l.split(': ')
-        privd[f[0]] = f[1]
+        privd[f[0]] = f[1].rstrip()
     privkf.close()
 
     print "privkey: %s" % privd['Key']
@@ -802,14 +817,14 @@ def makeDNSDynUpdateKeys():
     return( id, pubkey, privd['Key'] )
     
 
-def makeNamedKeyFile(x, keys):
+def makeNamedKeyFile(w, keys):
     """
 	make a ndwatch.key file for dynamic dns updates.
 	key is a tuple ( id, public key, private key)
     """
     import os
 
-    name= x + "/bind_update.key"
+    name= w + "/bind_update.key"
     f = open( name, "w" )
     f.write( "key %s. { \n" % keys[0] )
     f.write( "   algorithm HMAC-MD5;\n" )
@@ -820,7 +835,7 @@ def makeNamedKeyFile(x, keys):
     return( name )
 
 
-def probe(x):
+def probe(w):
     """
        look for initial setup info.
        set up dynamic update keys.
@@ -837,8 +852,8 @@ def probe(x):
     
 
     nets = findNets()
-    keys = makeDNSDynUpdateKeys()
-    kfname = makeNamedKeyFile(x,keys)
+    keys = makeDNSDynUpdateKeys(w)
+    kfname = makeNamedKeyFile(w,keys)
     print "keys: ", keys
 
     probe = open("si46.master.probe","w")
@@ -876,7 +891,7 @@ if __name__ == '__main__':
 	   masterfile=a
     
     if probe_only:
-	probe(writeconfdir)
+	probe(write2dir)
 	exit()
 
     master_clean(writeconfdir)
