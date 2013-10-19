@@ -29,6 +29,7 @@ import getopt
 import time
 import copy
 import os
+import subprocess
 import stat
 import grp
 import fnmatch
@@ -226,7 +227,7 @@ def fwd_map(x, preamble, otherrecords, hosts, domain, netpfx, dhcp6_active ):
     print "fwd_map of %s" % domain
 
     if netpfx != '':
-   	v6revfname= w + "/" + "dbr." + netpfx
+   	v6revfname= x + "/" + "dbr." + netpfx
    	v6rev=open( v6revfname, 'w')
     	v6origin=ipv6hex2dotpfx(netpfx)
  	v6rev.write( "$ORIGIN %s.ip6.arpa.\n" % v6origin ) 
@@ -550,8 +551,19 @@ def master_parse(w, x, zf ):
 		    network=ipv6pfx
                     ipv6started=True
                 else:
-                    network=aopts['DNS-Network'][:-3] + '.'  # assumed /24...
-                    networks.append(aopts['DNS-Network'])
+		    print "aopts net: %s" % aopts['DNS-Network']
+		    mask = int(aopts['DNS-Network'][-2:])
+	            if mask == 64:
+                        ipv6pfx=aopts['DNS-Network'][:-4]
+				    
+		    elif mask == 24:
+                    # FIXME: HARDCODED 24 bit netmask only!
+                        network=aopts['DNS-Network'][:-3] + '.'  # assumed /24...
+                        networks.append(aopts['DNS-Network'])
+                    else:
+                        print "only 24 (ipv4) or 64 bit netmasks supported"
+                        exit(1)
+
                 print "network set to: %s" % network
 	elif 'DNS-Forwarders' in aopts:
 	        forwarders = aopts['DNS-Forwarders'].split(',')
@@ -726,12 +738,45 @@ def rndname():
 
     return name
 
+def findNets():
+    """
+    """
+    net4=''
+    net6=''
+    cmd = "ip addr"
+    print "+%s+" % cmd
+    proc = subprocess.Popen( ( cmd.split() ), stdout=subprocess.PIPE)
+    for l in proc.stdout.readlines() :
+        ll = l.split()
+        print ll
+
+	if ll[0] == 'inet':
+	   net = ll[1].split('/')
+	   netmask = int(net[1])
+	   netaddr = net[0].split('.')
+	   if netaddr[0] == '127' :
+		continue
+	   if netmask != 24:
+		print "ugh! only 24 bit netmask supported... sorry!"
+		exit
+	   print "netaddr: %s, mask: %d" % ( netaddr, netmask )
+	   net4=netaddr[0] + '.' + netaddr[1] + '.' + netaddr[2] + '/24'
+	elif ll[0] == 'inet6':
+  
+	   net = ll[1].split('/')
+	   netmask = int(net[1])
+	   netaddr = net[0].split(':')
+	   if ( netaddr[0] == 'fe80' or netaddr[0] == '' ) :
+		continue
+	   print "netaddr6: %s, mask: %d" % ( netaddr, netmask )
+           net6= "%s::/64" % ( ':'.join(netaddr[0:4]) )
+    return ( net4, net6 )
+
 def makeDNSDynUpdateKeys():
     """
 	Generate DNS update private public key authentication info.
 	return a tuple of ( id, public, private )
     """ 
-    import subprocess
 
     id=rndname()
     cmd = "dnssec-keygen -r /dev/urandom -a HMAC-MD5 -b 512 -n HOST " + id 
@@ -791,8 +836,9 @@ def probe(x):
     # guess ipv6 network?
     
 
+    nets = findNets()
     keys = makeDNSDynUpdateKeys()
-    kfname = makeNamedKeyFile(keys)
+    kfname = makeNamedKeyFile(x,keys)
     print "keys: ", keys
 
     probe = open("si46.master.probe","w")
@@ -800,6 +846,13 @@ def probe(x):
     probe.write( ";NDW-dnskey %s\n" % keys[1].split()[1] )
     probe.write( ";DNS-Updater %s %s\n" % ( kfname, keys[0] ) )
 
+    if nets[1] != '':
+        probe.write( ";DNS-Network=%s\n" % nets[1] )
+
+    if nets[0] != '':
+        probe.write( ";DNS-Network=%s\n" % nets[0] )
+
+    probe.close()
     return
 
 
