@@ -729,7 +729,7 @@ def rndname():
 	Generate a random identifier for DNS Update keys
     """
     import random
-    len = random.randrange(8,24)
+    len = random.randrange(4,8)
     
     name=""
     while len > 0:
@@ -778,7 +778,6 @@ def makeDNSDynUpdateKeys(w):
     # set name according to existing keys.
     found = False
     for kf in os.listdir(w):
-        print "looking in w:", kf
         if kf[0:5] == 'Ksi46':
 	   print "Found!"
 	   found=True
@@ -826,7 +825,7 @@ def makeNamedKeyFile(w, keys):
 
     name= w + "/bind_update.key"
     f = open( name, "w" )
-    f.write( "key %s. { \n" % keys[0] )
+    f.write( "key %s { \n" % keys[0] )
     f.write( "   algorithm HMAC-MD5;\n" )
     f.write( "   secret \"%s\";\n" % keys[2] )
     f.write( "};\n" )
@@ -858,7 +857,7 @@ def probe(w):
 
     probe = open("si46.master.probe","w")
     probe.write( ";NDW-dnskeyuser %s\n" % keys[0] )
-    probe.write( ";NDW-dnskey %s\n" % keys[1].split()[1] )
+    probe.write( ";NDW-dnskey %s\n" % keys[2] )
     probe.write( ";DNS-Updater %s %s\n" % ( kfname, keys[0] ) )
 
     if nets[1] != '':
