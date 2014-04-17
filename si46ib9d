@@ -98,7 +98,8 @@ def all_ipv6_interfaces():
 
 	scope: 00: Global, 0x20: local, 0x10 Loopback 
     """
-    scope = { '00':'Global', '20':'local', '10':'Loopback', '80':'Organization' }
+    scope = { '00':'Global', '20':'local', '10':'Loopback', '80':'Organization',
+		'90':'Unknown' }
     pf = open( "/proc/net/if_inet6", "r")
     
     ipv6_interfaces=[]
@@ -356,6 +357,7 @@ def namedconflocal(w, x, networks, ipv6pfx, domain, updater_keyfile, updater_key
    	nl.write( "\t%s:/64;\n" % ipv6pfx )
 
    nl.write( "\t127/8;\n" );
+   nl.write( "\t::1/120;\n" );
 
    nl.write( "};\n\n" )
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
