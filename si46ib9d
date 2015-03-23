@@ -98,7 +98,8 @@ def all_ipv6_interfaces():
 
 	scope: 00: Global, 0x20: local, 0x10 Loopback 
     """
-    scope = { '00':'Global', '20':'local', '10':'Loopback', '80':'Organization' }
+    scope = { '00':'Global', '20':'local', '10':'Loopback', '80':'Organization',
+		'90':'Unknown' }
     pf = open( "/proc/net/if_inet6", "r")
     
     ipv6_interfaces=[]
@@ -356,6 +357,7 @@ def namedconflocal(w, x, networks, ipv6pfx, domain, updater_keyfile, updater_key
    	nl.write( "\t%s:/64;\n" % ipv6pfx )
 
    nl.write( "\t127/8;\n" );
+   nl.write( "\t::1/120;\n" );
 
    nl.write( "};\n\n" )
    nl.write( "view \"internal\" {\n\tmatch-clients { internal; };\n\trecursion yes;\n" ) 
@@ -576,6 +578,9 @@ def master_parse(w, x, zf ):
 		updater_keyfile=line[1]
 		updater_key=line[2]
 
+	elif 'MAC' in aopts :
+		aopts['MAC'] = aopts['MAC'].lower()
+
         if len(l) >= 6:
            if line[0][0:6] == ';DHCP-' :
 		if line[0][6:] == "hosts":
@@ -633,7 +638,7 @@ def master_parse(w, x, zf ):
 		    aopts['MAC']='' 
 	       else:
 		    if len(aopts['MAC'].split(':')) != 6:
-			print 'bad MAC length:', aopts['MAC']
+			print 'WARNING: bad MAC length:', aopts['MAC']
 	
 		    elif ipv6started:
 	               	aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(ad))
@@ -646,10 +651,10 @@ def master_parse(w, x, zf ):
 		    	if ad in interfaces:
 				aopts['ip4addr'] = get_ipv4_address(ad)			
 			else:
-				print 'interface %s not up, has no address' % ad
+				print 'WARNING: interface %s not up, has no address' % ad
 		    else:
 			if not ad.isdigit():
-			    print 'numeric address expected: ', ad
+			    print 'WARNING: numeric address expected: ', ad
 	            	    aopts['ip4addr'] = network + '000'
 
 			elif int(ad) >= 255 or int(ad) < 0 :
@@ -659,13 +664,23 @@ def master_parse(w, x, zf ):
 	            	    aopts['ip4addr'] = network + ad
 
 			if len( aopts['ip4addr'].split('.')) != 4:
-				print 'bad address length: ', aopts['ip4addr']
+				print 'WARNING: bad address length: ', aopts['ip4addr']
 
 		        if ipv6started:
 	                   aopts['ip6addrfixed'] = "%s:%x" % (ipv6pfx, int(ad))
 
 	       aopts['hostname'] = lhs
 	       hosts.append(copy.deepcopy(aopts))
+
+               for h in hosts:
+                  #find out if someone else has same IP.
+                  if h['hostname'] == lhs :
+			continue
+
+		  if ( 'ip4addr' in h.keys() ) and ( h['ip4addr'] == aopts['ip4addr'] ):
+                       print 'WARNING: duplicate ip: host %s and %s both have: %s' % \
+                           ( lhs, h['hostname'], h['ip4addr'] )
+
 
 	   elif line[ini+1] == 'AAAA' :
                if not 'MAC' in aopts:
@@ -755,7 +770,7 @@ def findNets():
 	   if netaddr[0] == '127' :
 		continue
 	   if netmask != 24:
-		print "ugh! only 24 bit netmask supported... sorry!"
+		print "FATAL ERROR: ugh! only 24 bit netmask supported... sorry!"
 		exit
 	   net4=netaddr[0] + '.' + netaddr[1] + '.' + netaddr[2] + '/24'
 	elif ll[0] == 'inet6':
