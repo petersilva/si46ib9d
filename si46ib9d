@@ -8,9 +8,10 @@
 #    si46ib9d - Simple Setup Script for IP v4 & v6 for ISC bind9 & dhcp.
 #
 #Specification
-#	get host dns and MAC from data.master 
+#	get host dns and MAC from si46.master 
 #       Get IPv6 prefix from /etc/radvd.conf 
-#       Build:  dns zones (fwd and reverse) and dhcp (v4) file.
+#       Build:  dns zones (fwd and reverse) and dhcp (v4 and 6) file.
+#               build ndwatch.conf file.
 #
 #  FIXME:
 #       hard coded /etc/bind -> wdir.

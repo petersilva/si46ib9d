@@ -244,6 +244,7 @@ Improve DHCPv4 automation
 Support DHCPv6.
    Currently IPv6 uses SLAC and radvd.  fixed addresses for DHCPv6
    are calculated but not building the config file yet.
+   DONE!
 
 
 Other Stuff:  Firewall Scripts included at no extra cost!
