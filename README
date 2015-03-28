@@ -3,7 +3,7 @@ Si46ib9d - Setup IPv4 and IPv6 for ISC Bind9 and DHCP.
 
 Introduction
 
-Minimum configuration is given by what below:
+Minimum configuration is given below:
 
 --
 
@@ -22,13 +22,12 @@ Minimum configuration is given by what below:
 
 --
 
-If you look at the documentation for bind, you will find that a semi-colon (;) 
-is used as a comment delimiter.  If there is text on a line before a any
-semi-colon, then is is a normal part of a bind forward map.  si46 directives
-happen in the comments.  The directives are also case sensitive.
+as per bind documentation, a semi-colon (;) is used as a comment delimiter.  
+text on a line before a any semi-colon, is is a normal part of a bind forward map.  
+Si46 directives happen in the comments.  The directives are also case sensitive.
 
 The first si46 directive is ;DNS-Domain, the value you set there is the 
-domain you want to use for the file.  Here we are building a configuration
+domain you want to use for entire configuration.  Here we are building a configuration
 for example.com.  The second line is ;SOA.  This line is used to build
 the Start Of Authority, a header needed for all the forward and reverse 
 zones.  Documentation of SOA records is available in bind documentation.
@@ -134,12 +133,11 @@ directives:
    trestler IN AAAA 6rdif ; public
 
 The DNS-Network directive makes the script consult /etc/radvd.conf to determine
-the network prefix in effect.  Si46ib9d will try to assign for all later host records 
+the network prefix in effect.  Si46ib9d will assign addresses for all later host records 
 in the file.  The host entries that follow, instead of having an address,
 indicate the interface whose address should be used.  Whenever the program
 is run,  the interface and radvd.conf file information is refreshed, and the zones
 re-written completely.
-
 
 
 
