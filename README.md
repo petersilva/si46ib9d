@@ -1,11 +1,51 @@
 
-Si46ib9d - Setup IPv4 and IPv6 for ISC Bind9 and DHCP.
+Si46ib9d - Setup IPv4 and IPv6 for ISC Bind9 and DHCP
+-----------------------------------------------------
 
-Introduction
+# Introduction
 
-Minimum configuration is given below:
+This is a script you run on a single master configuration file
+( /etc/bind/si46.master ) that sets up all the real configurations
+for address allocation and host naming on a typical small network,
+for both IPv4 and IPv6.  The si46.master file is a bind9 forward 
+map file, with additional directives in comment sections that allow 
+building configuration for DHCP service for IPv4, and a 'what people 
+usually want' split-horizon DNS service, showing hosts on the network 
+only to other hosts on the network, with those outside the network 
+seeing only one or two chosen hosts.
 
---
+It does not run any services, it just defines the configurations for
+the standard debian-based services.  You run all your services in the
+standard way.
+
+## What is the point?
+If you want to be able to look at network traffic and have some idea who
+is talking to who, you need to map the addresses to human readable names.
+These are the services to do this.  This script is for people who have 
+configured bind and dhcp manually before, and find it tedious.  
+
+Using the tools as intended, you need to write the same information between 2 and 5
+times, (map host name to IPv4 address, map host name to IPv6 address, add revers entries (1 for each address), add the host to MAC mapping in a dhcp configuration, for IPv4, potentially again for IPv6.  With si46ib9d, you write the 
+information once, and the script creates all the other obvious copies for you.  
+
+While this sounds like a minor convenience for IPv4, in the IPv6 world it 
+becomes more important because they like to *renumber* things.  in IPv4 with 
+a typical home network, you have a single public address, and then a natting 
+firewall which means all your internal addresses are things you pick.  With 
+IPv6,  you normally do not NAT, so the addresses on your internal network 
+change because the addresses the ISP gives you change from time to time.
+
+So when your public firewall IP changes with IPv6 (which it does a couple of times a year), it changes the *prefix* for all internal hosts, and all of the 
+bind records need to be re-written.  This script, whenever it is run, just 
+reads the prefix from the network, and re-writes all the IPv6 records 
+correctly.  
+ 
+
+# Getting Started
+ 
+A Minimum si46.master configuration is given below:
+
+```
 
   ;DNS-Domain=example.com 
   ;SOA fwgw hostmaster 
@@ -20,25 +60,30 @@ Minimum configuration is given below:
 
   onehost IN A 3 ; MAC=52:54:00:f8:b5:26
 
---
+```
 
-as per bind documentation, a semi-colon (;) is used as a comment delimiter.  
-text on a line before a any semi-colon, is is a normal part of a bind forward map.  
+As per bind documentation, a semi-colon (;) is used as a comment delimiter.  
+text on a line before a any semi-colon, is a part of a normal bind forward map.
 Si46 directives happen in the comments.  The directives are also case sensitive.
 
 The first si46 directive is ;DNS-Domain, the value you set there is the 
-domain you want to use for entire configuration.  Here we are building a configuration
-for example.com.  The second line is ;SOA.  This line is used to build
-the Start Of Authority, a header needed for all the forward and reverse 
-zones.  Documentation of SOA records is available in bind documentation.
-Briefly, the elements are:
+domain you want to use for entire configuration.  Here we are building a 
+configuration for example.com.  The second line is ;SOA.  This line is used 
+to build the Start Of Authority, a header needed for all the forward and 
+reverse zones.  Documentation of SOA records is available in bind 
+documentation.  Briefly, the elements are:
+
+```
 
 	fwgw - the host on which the zone was created. (expands to: fwgw.example.com)
 	hostmaster - admin email address  (expands to: hostmaster@example.com)
 
-The rest of the SOA is given sensible default.  si46 generates the serial number 
-from the linux time stamp (seconds since start of epoch.)  and allows you to
-override the other settings (see si46.master.glorious for an example.)
+```
+
+The rest of the SOA is given sensible defaults.  Si46 generates the serial 
+number from the linux time stamp (seconds since start of epoch.)  and allows 
+you to override the other settings (see si46.master.glorious for an example
+with overrides.)
 
    IN NS fwgw.example.com. 
 
@@ -55,9 +100,10 @@ will be published to the world, and not just to internal users.
 
   ;DNS-Forwarders=123.142.225.1,123.142.227.2
 
-The DNS-Forwarders directive is where you put your ISP's DNS Server addresses (or some other provider.)
-The configuration will be such that the server will answer requests for the local domain,
-refer to the Forwarders for names outside the domain, and cache the replies for internal users.
+The DNS-Forwarders directive is where you put your ISP's DNS Server 
+addresses (or some other provider.) The configuration will be such that the 
+server will answer requests for the local domain, refer to the Forwarders 
+for names outside the domain, and cache the replies for internal users.
 
 The next directive is to declare a network.
 
@@ -67,29 +113,37 @@ This means that:
 	-- addresses that follow, if not complete, should be assumed to be in this network.
 	-- a reverse map for this network will be created.
 
-You may have noticed that the network in this case, is a 192.168... network.  This is a 
-non-routable address range.  There is an assumption that, for IPv4, the firewall gateway
-is taking care of NAT.
+You may have noticed that the network in this case, is a 192.168... network.  
+This is a non-routable address range.  There is an assumption that, for IPv4, 
+the firewall gateway is taking care of NAT.
 
-So with all that out of the way, here is what you need to declare machines on your network:
+So with all that out of the way, here is what you need to declare machines on 
+your network:
 
   onehost IN A 3 ; MAC=52:54:00:f8:b5:26
 
-So there is a machine named 'onehost' whose MAC address is given.  onehost's IP address will
-be 192.168.10.3.  The DHCP configuration will be made for onehost to be always be given
-the same address, if asked.  If IPv6 is enabled, the MAC address can also be used to
-calculate the Stateless autoconfiguration (SLAC) address, or for dhcpv6.
+So there is a machine named 'onehost' whose MAC address is given.  onehost's 
+IP address will be 192.168.10.3.  The DHCP configuration will be made for 
+onehost to be always be given the same address, if asked.  If IPv6 is enabled, 
+the MAC address can also be used to calculate the Stateless autoconfiguration 
+(SLAC) address, or for dhcpv6.  
 
-To make use of this configuration file, you need to have bind9 and isc-dhcp-server installed:
+To make use of this configuration file, you need to have bind9 and 
+isc-dhcp-server installed:
 
-apt-get install bind9 bindutils isc-dhcp-server
+```
 
-#test to avoid overwriting real config:
-si46ib9d -r ./si46.master.simple -w `pwd`
+ apt-get install bind9 bindutils isc-dhcp-server
 
-for the simple example, si46ib9d creates: named.conf, named.conf.options, named.conf.local, 
-dbf.internal.example.com, dbf.public.example.com, dbr.192.168.10, dbr.192.168.9,
-dbr.empty-zones, dhcpd.conf, named.conf, named.conf.local, named.conf.options
+ #test to avoid overwriting real config:
+ si46ib9d -r ./si46.master.simple -w `pwd`
+
+```
+
+for the simple example, si46ib9d creates: named.conf, named.conf.options, 
+named.conf.local, dbf.internal.example.com, dbf.public.example.com, 
+dbr.192.168.10, dbr.192.168.9, dbr.empty-zones, dhcpd.conf, named.conf, 
+named.conf.local, named.conf.options
 
 #do syntax check of the setup:
 named-checkconf -z named.conf
@@ -113,12 +167,13 @@ Dealing with DHCP and guests.
 FIXME: to come, see example in si46.example.glorious
 
 
-Adding IPv6.
+# Adding IPv6
 
 My ISP has deployed IPv6 using the Rapid Deployment (RD) protocol.
-Using DHCP extensions, the Router Advertisement Daemon (radvd) has been configured
-to announce addresses whenever the ISP link is brought up.  Unlike IPv4, where
-networks inside are isolated from the outside via Network Address Translation,
+Using DHCP extensions, the Router Advertisement Daemon (radvd) has been 
+configured to announce addresses whenever the ISP link is brought up.  
+Unlike IPv4, where networks inside are isolated from the outside via 
+Network Address Translation,
 or addresses are permanently assigned, in IPv6, there is the notion of "rapid-renumbering"
 and the addresses assigned by my ISP change from time to time.
 
