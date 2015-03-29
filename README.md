@@ -145,9 +145,13 @@ named.conf.local, dbf.internal.example.com, dbf.public.example.com,
 dbr.192.168.10, dbr.192.168.9, dbr.empty-zones, dhcpd.conf, named.conf, 
 named.conf.local, named.conf.options
 
+```
+
 #do syntax check of the setup:
 named-checkconf -z named.conf
 
+
+```
 
 Once you are happy that the configuraion looks good, copy it to the standard /etc/bind location.
 
@@ -181,11 +185,17 @@ Whenever the IPv6 network address changes, there is no NAT, so all the addresses
 on the internal zone have to change as well.  With si46ib9d, I supply the following
 directives:
 
+```
+
+
    ;DNS-Network=radvd
 
    trestler	IN 	A	eth1 ; public
 
    trestler IN AAAA 6rdif ; public
+
+
+```
 
 The DNS-Network directive makes the script consult /etc/radvd.conf to determine
 the network prefix in effect.  Si46ib9d will assign addresses for all later host records 
@@ -253,7 +263,7 @@ access to the internal network, they will only get the public view,
 which is still a benefit.  
 
 The script is can be run regularly to re-create zones when using a system 
-with an ISP provided dynamic address, allocted by some mechanism such as 
+with an ISP provided dynamic address, allocated by some mechanism such as 
 DHCP.  The one departure from making the si46.master file a valid forward
 zone is that one can place an interface address in place of an IP (4 or 6)
 address in the file, which is assumed to be on the machine where the script 
