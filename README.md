@@ -20,15 +20,16 @@ standard way.
 
 ## What do you need?
 
--- This script runs on a router, or a host that runs DNS and DHCP servers.
-   if you have a canned router appliance that does not run real debian,
-   then this is not useful.   for example, I run my gateway on a raspberry 
-   pi, running raspbian.  This is much more flexible/intuitive for linux
-   oriented admins, but there is not UI (it's all command line.)
+This script runs on a router, or a host that runs DNS and DHCP servers.
+if you have a canned router appliance that does not run real debian,
+then this is not useful.   for example, I run my gateway on a raspberry 
+pi, running raspbian.  This is much more flexible/intuitive for linux
+oriented admins, but there is no UI, everything it done at the command
+line. 
 
--- You should already have some background in bind/dhcp, etc... This script
-   automates the tedium, but it does not help you understand the individual
-   services.
+You should already have some background in bind/dhcp, etc... This script
+automates the tedium, but it does not help you understand the individual
+services.
 
 ## What is the point?
 If you want to be able to look at network traffic and have some idea who
@@ -36,18 +37,17 @@ is talking to who, you need to map the addresses to human readable names.
 These are the services to do this.  This script is for people who have 
 configured bind and dhcp manually before, and find it tedious.  
 
-Using the tools as intended, you need to write the same information between 2 and 5
-times, (map host name to IPv4 address, map host name to IPv6 address, add revers entries (1 for each address), add the host to MAC mapping in a dhcp configuration, for IPv4, potentially again for IPv6.  With si46ib9d, you write the 
-information once, and the script creates all the other obvious copies for you.  
+Using the standar linux tools as intended, you need to write the same 
+information between 2 and 6 times.  With si46ib9d, you write the information 
+once, and the script creates all the other obvious copies for you.  
 
 While this sounds like a minor convenience for IPv4, in the IPv6 world it 
 becomes more important because they like to *renumber* things.  in IPv4 with 
 a typical home network, you have a single public address, and then a natting 
-firewall which means all your internal addresses are things you pick.  With 
-IPv6,  you normally do not NAT, so the addresses on your internal network 
-change because the addresses the ISP gives you change from time to time.
+firewall which means all your internal addresses are static ones you pick.  
 
-So when your public firewall IP changes with IPv6 (which it does a couple of times a year), it changes the *prefix* for all internal hosts, and all of the 
+With IPv6, you normally do not NAT.  So when your public firewall IP 
+address changes (which it does a couple of times a year), all of the 
 bind records need to be re-written.  This script, whenever it is run, just 
 reads the prefix from the network, and re-writes all the IPv6 records 
 correctly.  
