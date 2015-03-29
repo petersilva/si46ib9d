@@ -18,6 +18,18 @@ It does not run any services, it just defines the configurations for
 the standard debian-based services.  You run all your services in the
 standard way.
 
+## What do you need?
+
+-- This script runs on a router, or a host that runs DNS and DHCP servers.
+   if you have a canned router appliance that does not run real debian,
+   then this is not useful.   for example, I run my gateway on a raspberry 
+   pi, running raspbian.  This is much more flexible/intuitive for linux
+   oriented admins, but there is not UI (it's all command line.)
+
+-- You should already have some background in bind/dhcp, etc... This script
+   automates the tedium, but it does not help you understand the individual
+   services.
+
 ## What is the point?
 If you want to be able to look at network traffic and have some idea who
 is talking to who, you need to map the addresses to human readable names.
@@ -206,18 +218,19 @@ re-written completely.
 
 
 
-Motivation for the si46ib9d script.
+# Motivation for the si46ib9d script.
 
-ISC tools are the most popular ones, but they are built for runing large corporate
-sites, and their configuration methods, allow an almost infinite configurability, and
-are quite intimidating in the number of decisions they ask.  Further, they have grown 
-somewhat organically over time, and have gotten a bit unwieldy.  
+ISC tools are the most popular ones, but they are built for running large 
+corporate sites, and their configuration methods, allow an almost infinite 
+configurability, and are quite intimidating in the number of decisions they 
+ask.  Further, they have grown somewhat organically over time, and have 
+gotten a bit unwieldy.  
 
 This script uses a single data file, that looks a lot like an ISC forward 
-zone file, but adds 'decorations' (directives hidden in zone file comments) to allow 
-it to be used to build the entire configuration.  It is also much more
-information dense, one can look at a few lines, at most a page, of configuration
-and understand the general setup.  
+zone file, but adds 'decorations' (directives hidden in zone file comments) 
+to allow it to be used to build the entire configuration.  It is also much 
+more information dense, one can look at a few lines, at most a page, of 
+configuration and understand the general setup.  
 
 The single data file is much simpler to maintain and is meant for editing 
 by humans.  Once the domain and network decorators are set, adding
@@ -263,52 +276,45 @@ access to the internal network, they will only get the public view,
 which is still a benefit.  
 
 The script is can be run regularly to re-create zones when using a system 
-with an ISP provided dynamic address, allocated by some mechanism such as 
+with an ISP provided dynamic addresses, allocated by some mechanism such as 
 DHCP.  The one departure from making the si46.master file a valid forward
 zone is that one can place an interface address in place of an IP (4 or 6)
 address in the file, which is assumed to be on the machine where the script 
 is run.  If you can run the script on the router, then the dynamic addresses
 are automatically picked up.
 
-
-BUGS:
+# Future work
+## BUGS:
    -- need a way to put in real comments... ;# ?
 
 
-TODO - Improvements I would like to do
-   Add named-checkzone
-   Adding NS directive.
-	have it build name server prolog from the tagged entries.
-   Add the tail -f syslog to identify what to add to config.
-   Adding auto-dhcp.
+## TODO - Improvements I would like to do
+   -- Add named-checkzone
+   -- Adding NS directive.
+      have it build name server prolog from the tagged entries.
+   -- Add the tail -f syslog to identify what to add to config.
+   -- Adding auto-dhcp.
 	;DNS-Network 192.168.1.0 gateway=1 dhcp (dungeon|guests)=4
+   -- Run on other machines.
+      This script works a lot better/more automagically if it is run
+      on the gateway firewall.  Many use an appliance as a firewall, rather
+      than a real debian host.  The script uses /etc/radvd.conf and the interface
+      addresses on the gateway hosts to build the zone.  It would be better
+      if the script would notice, at a client level, parameters and use
+      them, rather than have to run on the gateway.
 
-Run on other machines.
-   This script works a lot better/more automagically if it is run
-   on the gateway firewall.  Many use an appliance as a firewall, rather
-   than a real debian host.  The script uses /etc/radvd.conf and the interface
-   addresses on the gateway hosts to build the zone.  It would be better
-   if the script would notice, at a client level, parameters and use
-   them, rather than have to run on the gateway.
+   -- Build whole named configuration.
+      currently builds: named.conf.local, all fwd and rev zones,
+      named.conf, named.conf.options, but not: zone.empty,
+      db.0, db.127, db.root, etc...
+      these files are pretty trivial, did not see the point, but
+      if you do not create them, the checkconf remains reliant on /etc/bind.
 
-Build whole named configuration.
-   currently builds: named.conf.local, all fwd and rev zones,
-   named.conf, named.conf.options, but not: zone.empty,
-   db.0, db.127, db.root, etc...
-   these files are pretty trivial, did not see the point, but
-   if you do not create them, the checkconf remains reliant on /etc/bind.
-
-Improve DHCPv4 automation
-   pick an address range automatically.
-   automatic guest addresses.
-   add email notification for guests.
-   add a donjeon mode... (wrong router?, wrong net?) for guests.
-
-Support DHCPv6.
-   Currently IPv6 uses SLAC and radvd.  fixed addresses for DHCPv6
-   are calculated but not building the config file yet.
-   DONE!
-
+   -- Improve DHCPv4 automation
+      pick an address range automatically.
+      automatic guest addresses.
+      add email notification for guests.
+      add a donjeon mode... (wrong router?, wrong net?) for guests.
 
 Other Stuff:  Firewall Scripts included at no extra cost!
 
