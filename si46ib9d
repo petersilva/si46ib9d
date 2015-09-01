@@ -123,6 +123,16 @@ def empty_internal_reverse_zones(w, networks):
        '172.22', '172.23', '172.24', '172.25', '172.26', '172.27', '172.28', '172.29', \
        '172.30', '172.31' )
     zname=  w  + "/dbr.empty-zones"
+    efz = open( w + "/db.empty", "w" )
+    efz.write("$TTL   86400\n@	IN	SOA	localhost. root.localhost. (\n" )
+    efz.write("\t\t       1		; Serial\n" )
+    efz.write("\t\t  604800		; Refresh\n" )
+    efz.write("\t\t   86400		; Retry\n" )
+    efz.write("\t\t 2419200		; Expire\n" ) 
+    efz.write("\t\t   86400 )	; Negative Cache TTL\n;\n")
+    efz.write("@	IN	NS	localhost. \n")
+    efz.close()
+    
     enf = open( zname, "w" )
     for en in empty_nets:
 	na = en.split('.')
